@@ -322,6 +322,16 @@ body {
     box-shadow: 0 4px 12px rgba(220, 38, 38, 0.2);
 }
 
+.success {
+    background: linear-gradient(45deg, #059669, #10b981);
+    color: white;
+    padding: 0.8rem;
+    border-radius: 12px;
+    margin-bottom: 1.5rem;
+    border: 1px solid rgba(16, 185, 129, 0.3);
+    box-shadow: 0 4px 12px rgba(5, 150, 105, 0.2);
+}
+
 .form-group {
     margin-bottom: 1.5rem;
 }
@@ -420,6 +430,10 @@ body {
 .auth-links a {
     color: #1da1f2;
     text-decoration: none;
+}
+
+.auth-links a:hover {
+    text-decoration: underline;
 }
 
 /* Profile */

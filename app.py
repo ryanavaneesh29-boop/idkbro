@@ -2,7 +2,12 @@ from flask import Flask, render_template, request, redirect, url_for, session
 import json
 import hashlib
 import uuid
-from datetime import datetime
+import re
+import os
+import secrets
+import smtplib
+from datetime import datetime, timedelta
+from email.message import EmailMessage
 from pathlib import Path
 from functools import wraps
 
@@ -54,6 +59,68 @@ def hash_password(password):
 def generate_id():
     return str(uuid.uuid4())[:8]
 
+def is_valid_email(email):
+    return bool(re.fullmatch(r'[^@\s]+@[^@\s]+\.[^@\s]+', email))
+
+def normalize_user_record(uid, user):
+    user.setdefault('id', uid)
+    user.setdefault('email', '')
+    user.setdefault('following', [])
+    user.setdefault('followers', [])
+    user.setdefault('drafts', [])
+    user.setdefault('pending_requests', [])
+    user.setdefault('blocked', [])
+    user.setdefault('is_private', False)
+    user.setdefault('pinned_tweet', None)
+    user.setdefault('reset_token', None)
+    user.setdefault('reset_token_expires_at', None)
+    return user
+
+def parse_iso_datetime(value):
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(value)
+    except ValueError:
+        return None
+
+def find_user_by_reset_token(token):
+    for uid, user in users.items():
+        if user.get('reset_token') != token:
+            continue
+        expires_at = parse_iso_datetime(user.get('reset_token_expires_at'))
+        if not expires_at or expires_at < datetime.utcnow():
+            user['reset_token'] = None
+            user['reset_token_expires_at'] = None
+            save_data(users, tweets, notifications, messages)
+            return None, None
+        return uid, user
+    return None, None
+
+def send_password_reset_email(recipient_email, reset_link):
+    smtp_host = os.getenv('SMTP_HOST')
+    smtp_port = int(os.getenv('SMTP_PORT', '587'))
+    smtp_username = os.getenv('SMTP_USERNAME')
+    smtp_password = os.getenv('SMTP_PASSWORD')
+    mail_from = os.getenv('MAIL_FROM') or smtp_username
+
+    if not all([smtp_host, smtp_username, smtp_password, mail_from]):
+        raise RuntimeError('Email is not configured yet. Set SMTP_HOST, SMTP_PORT, SMTP_USERNAME, SMTP_PASSWORD, and MAIL_FROM.')
+
+    message = EmailMessage()
+    message['Subject'] = 'Reset your idkbro password'
+    message['From'] = mail_from
+    message['To'] = recipient_email
+    message.set_content(
+        'We received a request to reset your idkbro password.\n\n'
+        f'Open this link to choose a new password:\n{reset_link}\n\n'
+        'This link expires in 30 minutes. If you did not request this, you can ignore this email.'
+    )
+
+    with smtplib.SMTP(smtp_host, smtp_port) as server:
+        server.starttls()
+        server.login(smtp_username, smtp_password)
+        server.send_message(message)
 
 def get_user_by_username(username):
     for uid, user in users.items():
@@ -61,10 +128,16 @@ def get_user_by_username(username):
             return uid, user
     return None, None
 
+def get_user_by_email(email):
+    email = email.lower().strip()
+    for uid, user in users.items():
+        if user.get('email', '').lower() == email:
+            return uid, user
+    return None, None
+
 def parse_tweet_content(content):
     """Parse hashtags and mentions in tweet content"""
-    import re
-    
+
     # Parse hashtags
     hashtag_pattern = r'#(\w+)'
     content = re.sub(hashtag_pattern, r'<a href="/hashtag/\1" class="hashtag">#\1</a>', content)
@@ -105,6 +178,7 @@ def create_notification(user_id, notification_type, from_user_id, tweet_id=None)
 
 # Load data at startup
 users, tweets, notifications, messages = load_data()
+users = {uid: normalize_user_record(uid, user) for uid, user in users.items()}
 
 @app.route('/')
 def index():
@@ -145,38 +219,49 @@ def index():
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
-        username = request.form['username'].lower().strip()
+        identifier = request.form['email'].lower().strip()
         password = hash_password(request.form['password'])
-        
+
         for uid, user in users.items():
-            if user['username'] == username and user['password_hash'] == password:
+            email_match = user.get('email', '').lower() == identifier
+            username_match = user.get('username', '').lower() == identifier
+            if (email_match or username_match) and user['password_hash'] == password:
                 session['user_id'] = uid
                 return redirect(url_for('index'))
-        
-        return render_template('login.html', error='Invalid username or password')
-    
+
+        return render_template('login.html', error='Invalid email or password')
+
     return render_template('login.html')
 
 @app.route('/register', methods=['GET', 'POST'])
 def register():
     if request.method == 'POST':
         username = request.form['username'].lower().strip()
+        email = request.form['email'].lower().strip()
         display_name = request.form['display_name']
         password = request.form['password']
         bio = request.form.get('bio', '')
-        
+
         # Check if username exists
         for user in users.values():
             if user['username'] == username:
                 return render_template('register.html', error='Username already taken')
-        
+
+        if not is_valid_email(email):
+            return render_template('register.html', error='Please enter a valid email address')
+
+        existing_email_id, _ = get_user_by_email(email)
+        if existing_email_id:
+            return render_template('register.html', error='Email already registered')
+
         if len(password) < 4:
             return render_template('register.html', error='Password must be at least 4 characters')
-        
+
         uid = generate_id()
         users[uid] = {
             'id': uid,
             'username': username,
+            'email': email,
             'display_name': display_name,
             'bio': bio,
             'password_hash': hash_password(password),
@@ -192,8 +277,62 @@ def register():
         save_data(users, tweets, notifications, messages)
         session['user_id'] = uid
         return redirect(url_for('index'))
-    
+
     return render_template('register.html')
+
+@app.route('/forgot-password', methods=['GET', 'POST'])
+def forgot_password():
+    if request.method == 'POST':
+        email = request.form['email'].lower().strip()
+
+        if not is_valid_email(email):
+            return render_template('forgot_password.html', error='Please enter a valid email address')
+
+        uid, user = get_user_by_email(email)
+        if not user:
+            return render_template('forgot_password.html', error='No account was found with that email')
+
+        token = secrets.token_urlsafe(32)
+        users[uid]['reset_token'] = token
+        users[uid]['reset_token_expires_at'] = (datetime.utcnow() + timedelta(minutes=30)).isoformat()
+        save_data(users, tweets, notifications, messages)
+
+        reset_link = url_for('reset_password', token=token, _external=True)
+        try:
+            send_password_reset_email(email, reset_link)
+        except Exception as exc:
+            users[uid]['reset_token'] = None
+            users[uid]['reset_token_expires_at'] = None
+            save_data(users, tweets, notifications, messages)
+            return render_template('forgot_password.html', error=str(exc))
+
+        return render_template('forgot_password.html', success='We emailed you a password reset link.')
+
+    return render_template('forgot_password.html')
+
+@app.route('/reset-password/<token>', methods=['GET', 'POST'])
+def reset_password(token):
+    uid, user = find_user_by_reset_token(token)
+    if not user:
+        return render_template('reset_password.html', error='This reset link is invalid or has expired.')
+
+    if request.method == 'POST':
+        new_password = request.form['new_password']
+        confirm_password = request.form['confirm_password']
+
+        if len(new_password) < 4:
+            return render_template('reset_password.html', token=token, error='Password must be at least 4 characters')
+
+        if new_password != confirm_password:
+            return render_template('reset_password.html', token=token, error='Passwords do not match')
+
+        users[uid]['password_hash'] = hash_password(new_password)
+        users[uid]['reset_token'] = None
+        users[uid]['reset_token_expires_at'] = None
+        save_data(users, tweets, notifications, messages)
+        return render_template('reset_password.html', success='Password updated. You can log in now.')
+
+    return render_template('reset_password.html', token=token)
 
 @app.route('/logout')
 def logout():
@@ -769,8 +908,6 @@ def mark_message_read(message_id):
         message['read'] = True
         save_data(users, tweets, notifications, messages)
     return redirect(url_for('messages_page'))
-
-import os
 
 if __name__ == '__main__':
     port = int(os.getenv("PORT", 5000))
