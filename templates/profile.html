@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+
+{% block title %}{{ user.display_name }} (@{{ user.username }}){% endblock %}
+
+{% block content %}
+<div class="profile-container">
+    <div class="profile-header">
+        <h2>{{ user.display_name }}</h2>
+        <p class="username">@{{ user.username }}</p>
+        <p class="bio">{{ user.bio or 'No bio yet' }}</p>
+        <div class="stats">
+            <span><strong>{{ user.following|length }}</strong> Following</span>
+            <span><strong>{{ user.followers|length }}</strong> Followers</span>
+        </div>
+        {% if current_user and user.id != current_user.id %}
+        <form action="{{ url_for('follow_user', username=user.username) }}" method="POST">
+            <button type="submit" class="btn {% if is_following %}btn-secondary{% else %}btn-primary{% endif %}">
+                {% if is_following %}Unfollow{% else %}Follow{% endif %}
+            </button>
+        </form>
+        <form action="{{ url_for('block_user', username=user.username) }}" method="POST">
+            <button type="submit" class="btn btn-secondary">Block</button>
+        </form>
+        <a href="{{ url_for('send_message', username=user.username) }}" class="btn btn-primary">Send Message</a>
+        {% endif %}
+
+        {% if current_user and user.id == current_user.id and user.pinned_tweet %}
+        <div class="pinned-tweet">
+            <h4>Pinned Tweet</h4>
+            {% set pt = all_tweets.get(user.pinned_tweet) %}
+            {% if pt %}
+            <p>{{ pt.parsed_content|safe }}</p>
+            {% else %}
+            <p>No pinned tweet.</p>
+            {% endif %}
+        </div>
+        {% endif %}
+    </div>
+
+    <h3>Tweets</h3>
+    <div class="tweets-feed">
+        {% for tweet in tweets %}
+        <div class="tweet">
+            <div class="tweet-header">
+                <strong>{{ tweet.display_name }}</strong>
+                <span class="username">@{{ tweet.username }}</span>
+                <span class="timestamp">{{ tweet.created_at[:16] }}</span>
+            </div>
+            <div class="tweet-content">{{ tweet.content }}</div>
+            <div class="tweet-stats">
+                <span>❤️ {{ tweet.like_count }}</span>
+                <span>🔄 {{ tweet.retweet_count }}</span>
+            </div>
+        </div>
+        {% else %}
+        <p>No tweets yet</p>
+        {% endfor %}
+    </div>
+</div>
+{% endblock %}

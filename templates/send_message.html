@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+
+{% block title %}Send Message - idkbro{% endblock %}
+
+{% block content %}
+<div class="auth-container">
+    <h2>Send Message to {{ target_user.display_name }}</h2>
+    <form method="POST">
+        <div class="form-group">
+            <label for="content">Message</label>
+            <textarea name="content" id="content" rows="4" maxlength="280" placeholder="What's on your mind?" required></textarea>
+            <div class="char-count">
+                <span id="char-count">0</span>/280
+            </div>
+        </div>
+        <button type="submit" class="btn btn-primary btn-full">Send Message</button>
+    </form>
+    <p class="auth-links">
+        <a href="{{ url_for('messages_page') }}">Back to Messages</a> | 
+        <a href="{{ url_for('profile', username=target_user.username) }}">Back to Profile</a>
+    </p>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const textarea = document.getElementById('content');
+    const charCount = document.getElementById('char-count');
+    
+    textarea.addEventListener('input', function() {
+        charCount.textContent = this.value.length;
+        if (this.value.length > 280) {
+            charCount.style.color = 'red';
+        } else {
+            charCount.style.color = '';
+        }
+    });
+});
+</script>
+{% endblock %}

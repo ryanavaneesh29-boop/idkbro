@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}idkbro{% endblock %}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body class="{% if session.get('theme', 'dark') == 'light' %}light-theme{% endif %}">
+    <nav class="navbar">
+        <div class="nav-brand">
+            <a href="{{ url_for('index') }}">idkbro</a>
+        </div>
+        <button class="mobile-menu-toggle" aria-label="Toggle menu">
+            <span></span>
+            <span></span>
+            <span></span>
+        </button>
+        <div class="nav-links">
+            {% if current_user %}
+                <a href="{{ url_for('index') }}">Home</a>
+                <a href="{{ url_for('messages_page') }}">Messages</a>
+                <a href="{{ url_for('notifications_view') }}">Notifications</a>
+                <a href="{{ url_for('search') }}">Search</a>
+                <a href="{{ url_for('who_to_follow') }}">Who to follow</a>
+                <a href="{{ url_for('drafts') }}">Drafts</a>
+                <a href="{{ url_for('profile', username=current_user.username) }}">Profile</a>
+                <a href="{{ url_for('toggle_theme') }}" class="theme-toggle">
+                    {% if session.get('theme', 'dark') == 'dark' %}☀️{% else %}🌙{% endif %}
+                </a>
+                <a href="{{ url_for('logout') }}">Logout (@{{ current_user.username }})</a>
+            {% else %}
+                <a href="{{ url_for('login') }}">Login</a>
+                <a href="{{ url_for('register') }}">Register</a>
+            {% endif %}
+        </div>
+    </nav>
+    
+    <main class="container">
+        {% block content %}{% endblock %}
+    </main>
+    
+    <script src="{{ url_for('static', filename='script.js') }}"></script>
+</body>
+</html>

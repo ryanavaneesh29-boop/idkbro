@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="notifications-container">
+    <div class="notifications-header">
+        <h1>Notifications</h1>
+    </div>
+
+    <div class="notifications-list">
+        {% for notification in notifications %}
+        <div class="notification {% if not notification.read %}unread{% endif %}">
+            <div class="notification-content">
+                {% if notification.type == 'like' %}
+                    <a href="{{ url_for('profile', username=notification.from_username) }}" class="user-link">
+                        <strong>{{ notification.from_display_name }}</strong>
+                    </a>
+                    liked your tweet
+                    {% if notification.tweet_content %}
+                        <span class="tweet-preview">"{{ notification.tweet_content }}"</span>
+                    {% endif %}
+                {% elif notification.type == 'retweet' %}
+                    <a href="{{ url_for('profile', username=notification.from_username) }}" class="user-link">
+                        <strong>{{ notification.from_display_name }}</strong>
+                    </a>
+                    retweeted your tweet
+                    {% if notification.tweet_content %}
+                        <span class="tweet-preview">"{{ notification.tweet_content }}"</span>
+                    {% endif %}
+                {% elif notification.type == 'reply' %}
+                    <a href="{{ url_for('profile', username=notification.from_username) }}" class="user-link">
+                        <strong>{{ notification.from_display_name }}</strong>
+                    </a>
+                    replied to your tweet
+                    {% if notification.tweet_content %}
+                        <span class="tweet-preview">"{{ notification.tweet_content }}"</span>
+                    {% endif %}
+                {% elif notification.type == 'follow' %}
+                    <a href="{{ url_for('profile', username=notification.from_username) }}" class="user-link">
+                        <strong>{{ notification.from_display_name }}</strong>
+                    </a>
+                    started following you
+                {% endif %}
+            </div>
+            <div class="notification-time">
+                {{ notification.created_at[:16] }}
+            </div>
+        </div>
+        {% else %}
+        <div class="empty-state">
+            <p>No notifications yet! When people interact with your tweets, you'll see them here.</p>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endblock %}

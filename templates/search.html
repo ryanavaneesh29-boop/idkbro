@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="search-container">
+    <!-- Search Form -->
+    <div class="search-box">
+        <form action="{{ url_for('search') }}" method="GET">
+            <input type="text" name="q" value="{{ query }}" placeholder="Search tweets and users..." required>
+            <button type="submit" class="btn btn-primary">Search</button>
+        </form>
+    </div>
+
+    {% if query %}
+    <div class="search-results">
+        <h2>Search results for "{{ query }}"</h2>
+        
+        <!-- Users Section -->
+        {% if results.users %}
+        <div class="users-section">
+            <h3>Users</h3>
+            {% for user in results.users %}
+            <div class="user-result">
+                <div class="user-info">
+                    <a href="{{ url_for('profile', username=user.username) }}" class="user-link">
+                        <strong>{{ user.display_name }}</strong>
+                        <span class="username">@{{ user.username }}</span>
+                    </a>
+                    {% if user.bio %}
+                    <p class="bio">{{ user.bio }}</p>
+                    {% endif %}
+                </div>
+                {% if user.id != current_user.id %}
+                <form action="{{ url_for('follow_user', username=user.username) }}" method="POST" class="follow-form">
+                    <button type="submit" class="btn {% if user.is_following %}btn-secondary{% else %}btn-primary{% endif %}">
+                        {% if user.is_following %}Unfollow{% else %}Follow{% endif %}
+                    </button>
+                </form>
+                {% endif %}
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+        
+        <!-- Tweets Section -->
+        {% if results.tweets %}
+        <div class="tweets-section">
+            <h3>Tweets</h3>
+            {% for tweet in results.tweets %}
+            <div class="tweet">
+                <div class="tweet-header">
+                    <a href="{{ url_for('profile', username=tweet.username) }}" class="user-link">
+                        <strong>{{ tweet.display_name }}</strong>
+                        <span class="username">@{{ tweet.username }}</span>
+                    </a>
+                    <span class="timestamp">{{ tweet.created_at[:16] }}</span>
+                </div>
+                <div class="tweet-content">
+                    {{ tweet.content }}
+                </div>
+                <div class="tweet-stats">
+                    <form action="{{ url_for('like_tweet', tweet_id=tweet.id) }}" method="POST" class="like-form">
+                        <button type="submit" class="like-btn {% if tweet.is_liked %}liked{% endif %}">
+                            {% if tweet.is_liked %}❤️{% else %}🤍{% endif %}
+                            <span>{{ tweet.like_count }}</span>
+                        </button>
+                    </form>
+                    <form action="{{ url_for('retweet_tweet', tweet_id=tweet.id) }}" method="POST" class="retweet-form">
+                        <button type="submit" class="retweet-btn {% if session['user_id'] in tweet.get('retweets', []) %}retweeted{% endif %}">
+                            {% if session['user_id'] in tweet.get('retweets', []) %}🔄{% else %}🔄{% endif %}
+                            <span>{{ tweet.retweet_count }}</span>
+                        </button>
+                    </form>
+                    <button class="reply-btn" onclick="toggleReplyForm('{{ tweet.id }}')">💬</button>
+                </div>
+                
+                <!-- Reply Form -->
+                <div id="reply-form-{{ tweet.id }}" class="reply-form" style="display: none;">
+                    <form action="{{ url_for('reply_tweet', tweet_id=tweet.id) }}" method="POST">
+                        <textarea name="content" placeholder="Reply to this tweet..." maxlength="280" required></textarea>
+                        <div class="reply-actions">
+                            <span class="char-count">280</span>
+                            <button type="submit" class="btn btn-primary">Reply</button>
+                            <button type="button" onclick="toggleReplyForm('{{ tweet.id }}')">Cancel</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+        
+        {% if not results.users and not results.tweets %}
+        <div class="no-results">
+            <p>No results found for "{{ query }}"</p>
+        </div>
+        {% endif %}
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

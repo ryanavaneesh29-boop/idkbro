@@ -1,0 +1,652 @@
+import json
+import os
+import hashlib
+import uuid
+from datetime import datetime
+from typing import List, Dict, Optional, Set
+from dataclasses import dataclass, asdict, field
+from pathlib import Path
+
+
+@dataclass
+class User:
+    id: str
+    username: str
+    display_name: str
+    bio: str
+    password_hash: str
+    following: Set[str] = field(default_factory=set)
+    followers: Set[str] = field(default_factory=set)
+    created_at: str = field(default_factory=lambda: datetime.now().isoformat())
+    
+    def to_dict(self) -> dict:
+        return {
+            'id': self.id,
+            'username': self.username,
+            'display_name': self.display_name,
+            'bio': self.bio,
+            'password_hash': self.password_hash,
+            'following': list(self.following),
+            'followers': list(self.followers),
+            'created_at': self.created_at
+        }
+    
+    @classmethod
+    def from_dict(cls, data: dict) -> 'User':
+        user = cls(
+            id=data['id'],
+            username=data['username'],
+            display_name=data['display_name'],
+            bio=data['bio'],
+            password_hash=data['password_hash'],
+            created_at=data['created_at']
+        )
+        user.following = set(data.get('following', []))
+        user.followers = set(data.get('followers', []))
+        return user
+    
+    def follow(self, user_id: str) -> bool:
+        if user_id != self.id and user_id not in self.following:
+            self.following.add(user_id)
+            return True
+        return False
+    
+    def unfollow(self, user_id: str) -> bool:
+        if user_id in self.following:
+            self.following.remove(user_id)
+            return True
+        return False
+
+
+@dataclass
+class Tweet:
+    id: str
+    user_id: str
+    content: str
+    created_at: str
+    likes: Set[str] = field(default_factory=set)
+    retweets: Set[str] = field(default_factory=set)
+    replies: List[str] = field(default_factory=list)
+    is_retweet: bool = False
+    original_tweet_id: Optional[str] = None
+    
+    def to_dict(self) -> dict:
+        return {
+            'id': self.id,
+            'user_id': self.user_id,
+            'content': self.content,
+            'created_at': self.created_at,
+            'likes': list(self.likes),
+            'retweets': list(self.retweets),
+            'replies': self.replies,
+            'is_retweet': self.is_retweet,
+            'original_tweet_id': self.original_tweet_id
+        }
+    
+    @classmethod
+    def from_dict(cls, data: dict) -> 'Tweet':
+        tweet = cls(
+            id=data['id'],
+            user_id=data['user_id'],
+            content=data['content'],
+            created_at=data['created_at'],
+            is_retweet=data.get('is_retweet', False),
+            original_tweet_id=data.get('original_tweet_id')
+        )
+        tweet.likes = set(data.get('likes', []))
+        tweet.retweets = set(data.get('retweets', []))
+        tweet.replies = data.get('replies', [])
+        return tweet
+    
+    def like(self, user_id: str) -> bool:
+        if user_id not in self.likes:
+            self.likes.add(user_id)
+            return True
+        return False
+    
+    def unlike(self, user_id: str) -> bool:
+        if user_id in self.likes:
+            self.likes.remove(user_id)
+            return True
+        return False
+
+
+class SocialMediaPlatform:
+    def __init__(self, data_dir: str = "social_data"):
+        self.data_dir = Path(data_dir)
+        self.data_dir.mkdir(exist_ok=True)
+        
+        self.users_file = self.data_dir / "users.json"
+        self.tweets_file = self.data_dir / "tweets.json"
+        
+        self.users: Dict[str, User] = {}
+        self.tweets: Dict[str, Tweet] = {}
+        self.current_user: Optional[User] = None
+        
+        self._load_data()
+    
+    def _hash_password(self, password: str) -> str:
+        return hashlib.sha256(password.encode()).hexdigest()
+    
+    def _generate_id(self) -> str:
+        return str(uuid.uuid4())[:8]
+    
+    def _load_data(self):
+        if self.users_file.exists():
+            with open(self.users_file, 'r') as f:
+                users_data = json.load(f)
+                self.users = {uid: User.from_dict(u) for uid, u in users_data.items()}
+        
+        if self.tweets_file.exists():
+            with open(self.tweets_file, 'r') as f:
+                tweets_data = json.load(f)
+                self.tweets = {tid: Tweet.from_dict(t) for tid, t in tweets_data.items()}
+    
+    def _save_data(self):
+        with open(self.users_file, 'w') as f:
+            json.dump({uid: u.to_dict() for uid, u in self.users.items()}, f, indent=2)
+        
+        with open(self.tweets_file, 'w') as f:
+            json.dump({tid: t.to_dict() for tid, t in self.tweets.items()}, f, indent=2)
+    
+    def register(self, username: str, display_name: str, password: str, bio: str = "") -> bool:
+        username = username.lower().strip()
+        
+        # Check if username exists
+        for user in self.users.values():
+            if user.username == username:
+                print(f"❌ Username '@{username}' is already taken")
+                return False
+        
+        if len(password) < 4:
+            print("❌ Password must be at least 4 characters")
+            return False
+        
+        user_id = self._generate_id()
+        user = User(
+            id=user_id,
+            username=username,
+            display_name=display_name,
+            bio=bio,
+            password_hash=self._hash_password(password)
+        )
+        
+        self.users[user_id] = user
+        self._save_data()
+        print(f"✅ Account created successfully! Welcome, @{username}")
+        return True
+    
+    def login(self, username: str, password: str) -> bool:
+        username = username.lower().strip()
+        password_hash = self._hash_password(password)
+        
+        for user in self.users.values():
+            if user.username == username and user.password_hash == password_hash:
+                self.current_user = user
+                print(f"✅ Welcome back, @{user.username}!")
+                return True
+        
+        print("❌ Invalid username or password")
+        return False
+    
+    def logout(self):
+        if self.current_user:
+            print(f"👋 Goodbye, @{self.current_user.username}!")
+            self.current_user = None
+    
+    def post_tweet(self, content: str) -> Optional[Tweet]:
+        if not self.current_user:
+            print("❌ Please login first")
+            return None
+        
+        if len(content) > 280:
+            print("❌ Tweet too long (max 280 characters)")
+            return None
+        
+        if not content.strip():
+            print("❌ Tweet cannot be empty")
+            return None
+        
+        tweet = Tweet(
+            id=self._generate_id(),
+            user_id=self.current_user.id,
+            content=content.strip(),
+            created_at=datetime.now().isoformat()
+        )
+        
+        self.tweets[tweet.id] = tweet
+        self._save_data()
+        print("✅ Tweet posted!")
+        return tweet
+    
+    def delete_tweet(self, tweet_id: str) -> bool:
+        if not self.current_user:
+            print("❌ Please login first")
+            return False
+        
+        tweet = self.tweets.get(tweet_id)
+        if not tweet:
+            print("❌ Tweet not found")
+            return False
+        
+        if tweet.user_id != self.current_user.id:
+            print("❌ You can only delete your own tweets")
+            return False
+        
+        del self.tweets[tweet_id]
+        self._save_data()
+        print("✅ Tweet deleted")
+        return True
+    
+    def like_tweet(self, tweet_id: str) -> bool:
+        if not self.current_user:
+            print("❌ Please login first")
+            return False
+        
+        tweet = self.tweets.get(tweet_id)
+        if not tweet:
+            print("❌ Tweet not found")
+            return False
+        
+        if tweet.like(self.current_user.id):
+            self._save_data()
+            print("❤️  Liked!")
+            return True
+        else:
+            # Unlike if already liked
+            tweet.unlike(self.current_user.id)
+            self._save_data()
+            print("💔 Unliked")
+            return True
+    
+    def retweet(self, tweet_id: str, comment: str = "") -> Optional[Tweet]:
+        if not self.current_user:
+            print("❌ Please login first")
+            return None
+        
+        original = self.tweets.get(tweet_id)
+        if not original:
+            print("❌ Tweet not found")
+            return None
+        
+        if original.user_id == self.current_user.id:
+            print("❌ Cannot retweet your own tweet")
+            return None
+        
+        # Create retweet
+        content = f"RT @{self._get_username(original.user_id)}: {original.content}"
+        if comment:
+            content = f"{comment}\n\n{content}"
+        
+        retweet = Tweet(
+            id=self._generate_id(),
+            user_id=self.current_user.id,
+            content=content[:280],
+            created_at=datetime.now().isoformat(),
+            is_retweet=True,
+            original_tweet_id=tweet_id
+        )
+        
+        original.retweets.add(self.current_user.id)
+        self.tweets[retweet.id] = retweet
+        self._save_data()
+        print("🔄 Retweeted!")
+        return retweet
+    
+    def follow_user(self, username: str) -> bool:
+        if not self.current_user:
+            print("❌ Please login first")
+            return False
+        
+        username = username.lower().strip().lstrip('@')
+        target = None
+        
+        for user in self.users.values():
+            if user.username == username:
+                target = user
+                break
+        
+        if not target:
+            print(f"❌ User '@{username}' not found")
+            return False
+        
+        if target.id == self.current_user.id:
+            print("❌ Cannot follow yourself")
+            return False
+        
+        if self.current_user.follow(target.id):
+            target.followers.add(self.current_user.id)
+            self._save_data()
+            print(f"✅ Now following @{username}")
+            return True
+        else:
+            print(f"⚠️  Already following @{username}")
+            return False
+    
+    def unfollow_user(self, username: str) -> bool:
+        if not self.current_user:
+            print("❌ Please login first")
+            return False
+        
+        username = username.lower().strip().lstrip('@')
+        target = None
+        
+        for user in self.users.values():
+            if user.username == username:
+                target = user
+                break
+        
+        if not target:
+            print(f"❌ User '@{username}' not found")
+            return False
+        
+        if self.current_user.unfollow(target.id):
+            target.followers.discard(self.current_user.id)
+            self._save_data()
+            print(f"✅ Unfollowed @{username}")
+            return True
+        else:
+            print(f"⚠️  Not following @{username}")
+            return False
+    
+    def get_timeline(self, limit: int = 20) -> List[Tweet]:
+        if not self.current_user:
+            return []
+        
+        # Get tweets from followed users + own tweets
+        relevant_user_ids = self.current_user.following | {self.current_user.id}
+        
+        timeline_tweets = [
+            t for t in self.tweets.values() 
+            if t.user_id in relevant_user_ids
+        ]
+        
+        # Sort by date (newest first)
+        timeline_tweets.sort(key=lambda x: x.created_at, reverse=True)
+        return timeline_tweets[:limit]
+    
+    def get_user_profile(self, username: str = None) -> Optional[User]:
+        if username:
+            username = username.lower().strip().lstrip('@')
+            for user in self.users.values():
+                if user.username == username:
+                    return user
+            return None
+        return self.current_user
+    
+    def get_user_tweets(self, user_id: str) -> List[Tweet]:
+        user_tweets = [t for t in self.tweets.values() if t.user_id == user_id]
+        user_tweets.sort(key=lambda x: x.created_at, reverse=True)
+        return user_tweets
+    
+    def search_users(self, query: str) -> List[User]:
+        query = query.lower()
+        results = []
+        for user in self.users.values():
+            if (query in user.username.lower() or 
+                query in user.display_name.lower()):
+                results.append(user)
+        return results
+    
+    def _get_username(self, user_id: str) -> str:
+        user = self.users.get(user_id)
+        return user.username if user else "unknown"
+    
+    def _format_tweet(self, tweet: Tweet, show_stats: bool = True) -> str:
+        user = self.users.get(tweet.user_id)
+        if not user:
+            return "[Deleted User]"
+        
+        timestamp = datetime.fromisoformat(tweet.created_at).strftime("%Y-%m-%d %H:%M")
+        
+        lines = [
+            f"\n{'─' * 50}",
+            f"@{user.username} ({user.display_name}) · {timestamp}",
+            f"{tweet.content}",
+        ]
+        
+        if show_stats:
+            likes = len(tweet.likes)
+            retweets = len(tweet.retweets)
+            liked_by_me = self.current_user and self.current_user.id in tweet.likes
+            like_str = "❤️" if liked_by_me else "🤍"
+            lines.append(f"\n{like_str} {likes}  🔄 {retweets}  💬 {len(tweet.replies)}  [ID: {tweet.id}]")
+        
+        lines.append(f"{'─' * 50}")
+        return "\n".join(lines)
+    
+    def display_timeline(self):
+        tweets = self.get_timeline()
+        if not tweets:
+            print("\n📭 Your timeline is empty. Follow some users to see their tweets!")
+            return
+        
+        print(f"\n📜 Your Timeline ({len(tweets)} tweets)")
+        for tweet in tweets:
+            print(self._format_tweet(tweet))
+    
+    def display_profile(self, username: str = None):
+        user = self.get_user_profile(username)
+        if not user:
+            print("❌ User not found")
+            return
+        
+        is_me = self.current_user and self.current_user.id == user.id
+        following = self.current_user and user.id in self.current_user.following
+        
+        print(f"\n{'═' * 50}")
+        print(f"👤 @{user.username}")
+        print(f"📛 {user.display_name}")
+        print(f"📝 {user.bio or 'No bio'}")
+        print(f"📅 Joined: {datetime.fromisoformat(user.created_at).strftime('%B %Y')}")
+        print(f"👥 {len(user.following)} Following  |  {len(user.followers)} Followers")
+        
+        if not is_me and self.current_user:
+            status = "✅ Following" if following else "❌ Not following"
+            print(f"Status: {status}")
+        
+        print(f"{'═' * 50}")
+        
+        # Show recent tweets
+        tweets = self.get_user_tweets(user.id)[:5]
+        if tweets:
+            print(f"\n📝 Recent Tweets:")
+            for tweet in tweets:
+                print(self._format_tweet(tweet))
+        else:
+            print("\n📝 No tweets yet")
+
+
+class CLI:
+    def __init__(self):
+        self.platform = SocialMediaPlatform()
+    
+    def print_menu(self):
+        print("\n" + "=" * 50)
+        print("IDKBRO CLI")
+        print("=" * 50)
+        
+        if self.platform.current_user:
+            print(f"Logged in as: @{self.platform.current_user.username}")
+            print("\nCommands:")
+            print("  tweet <message>     - Post a new tweet")
+            print("  timeline            - View your timeline")
+            print("  like <tweet_id>     - Like/unlike a tweet")
+            print("  retweet <id> [comment] - Retweet with optional comment")
+            print("  follow <username>   - Follow a user")
+            print("  unfollow <username> - Unfollow a user")
+            print("  profile [username]  - View profile (yours or others)")
+            print("  search <query>      - Search for users")
+            print("  logout              - Log out")
+        else:
+            print("Not logged in")
+            print("\nCommands:")
+            print("  register            - Create new account")
+            print("  login               - Log in to existing account")
+        
+        print("  help                - Show this menu")
+        print("  quit                - Exit")
+        print("=" * 50)
+    
+    def run(self):
+        print("Welcome to idkbro CLI!")
+        
+        while True:
+            self.print_menu()
+            command = input("\n> ").strip().lower()
+            
+            if command == "quit" or command == "exit":
+                print("👋 Goodbye!")
+                break
+            
+            elif command == "help":
+                continue
+            
+            elif command == "register":
+                self._handle_register()
+            
+            elif command == "login":
+                self._handle_login()
+            
+            elif command == "logout":
+                self.platform.logout()
+            
+            elif command.startswith("tweet "):
+                content = command[6:]
+                self.platform.post_tweet(content)
+            
+            elif command == "timeline":
+                self.platform.display_timeline()
+            
+            elif command.startswith("like "):
+                tweet_id = command[5:].strip()
+                self.platform.like_tweet(tweet_id)
+            
+            elif command.startswith("retweet "):
+                parts = command[8:].split(" ", 1)
+                tweet_id = parts[0]
+                comment = parts[1] if len(parts) > 1 else ""
+                self.platform.retweet(tweet_id, comment)
+            
+            elif command.startswith("follow "):
+                username = command[7:].strip()
+                self.platform.follow_user(username)
+            
+            elif command.startswith("unfollow "):
+                username = command[9:].strip()
+                self.platform.unfollow_user(username)
+            
+            elif command.startswith("profile"):
+                username = command[7:].strip() if len(command) > 7 else None
+                self.platform.display_profile(username)
+            
+            elif command.startswith("search "):
+                query = command[7:].strip()
+                results = self.platform.search_users(query)
+                if results:
+                    print(f"\n🔍 Found {len(results)} user(s):")
+                    for user in results:
+                        print(f"  @{user.username} - {user.display_name}")
+                else:
+                    print("❌ No users found")
+            
+            else:
+                print("❓ Unknown command. Type 'help' for available commands.")
+    
+    def _handle_register(self):
+        print("\n📝 Create New Account")
+        username = input("Username (no @): ").strip()
+        display_name = input("Display name: ").strip()
+        bio = input("Bio (optional): ").strip()
+        password = input("Password: ")
+        confirm = input("Confirm password: ")
+        
+        if password != confirm:
+            print("❌ Passwords don't match")
+            return
+        
+        self.platform.register(username, display_name, password, bio)
+    
+    def _handle_login(self):
+        print("\n🔐 Login")
+        username = input("Username: ").strip()
+        password = input("Password: ")
+        self.platform.login(username, password)
+
+
+def demo():
+    """Run a quick demo without interactive CLI"""
+    print("Running idkbro Demo...\n")
+    
+    platform = SocialMediaPlatform(data_dir="demo_data")
+    
+    # Clear previous demo data
+    import shutil
+    if os.path.exists("demo_data"):
+        shutil.rmtree("demo_data")
+    platform = SocialMediaPlatform(data_dir="demo_data")
+    
+    # Create users
+    print("Creating users...")
+    platform.register("alice", "Alice Smith", "password123", "Tech enthusiast")
+    platform.register("bob", "Bob Jones", "password123", "Coffee lover")
+    platform.register("charlie", "Charlie Brown", "password123", "Developer")
+    
+    # Login as Alice
+    platform.login("alice", "password123")
+    
+    # Post some tweets
+    print("\n--- Alice posts tweets ---")
+    platform.post_tweet("Just joined this new platform! #excited")
+    platform.post_tweet("Working on a cool Python project today 🐍")
+    
+    # Login as Bob
+    platform.logout()
+    platform.login("bob", "password123")
+    
+    # Bob posts and follows Alice
+    print("\n--- Bob posts and follows Alice ---")
+    platform.post_tweet("Morning coffee is the best! ☕")
+    platform.follow_user("alice")
+    
+    # Login as Charlie
+    platform.logout()
+    platform.login("charlie", "password123")
+    
+    # Charlie follows everyone and posts
+    print("\n--- Charlie follows everyone ---")
+    platform.follow_user("alice")
+    platform.follow_user("bob")
+    platform.post_tweet("Just deployed my first app! 🚀")
+    
+    # Login back as Alice to see timeline
+    platform.logout()
+    platform.login("alice", "password123")
+    
+    print("\n--- Alice's Timeline ---")
+    platform.display_timeline()
+    
+    # Alice likes Bob's tweet
+    print("\n--- Alice likes Bob's tweet ---")
+    bob_tweets = platform.get_user_tweets(
+        next(u.id for u in platform.users.values() if u.username == "bob")
+    )
+    if bob_tweets:
+        platform.like_tweet(bob_tweets[0].id)
+    
+    # Show Alice's profile
+    print("\n--- Alice's Profile ---")
+    platform.display_profile()
+    
+    print("\n✅ Demo completed!")
+    platform.logout()
+
+
+if __name__ == "__main__":
+    import sys
+    
+    if len(sys.argv) > 1 and sys.argv[1] == "--demo":
+        demo()
+    else:
+        cli = CLI()
+        cli.run()

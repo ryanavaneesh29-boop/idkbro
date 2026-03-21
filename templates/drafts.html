@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="home-container">
+    <!-- Draft Box -->
+    <div class="tweet-box">
+        <h2>Save a Draft</h2>
+        <form action="{{ url_for('drafts') }}" method="POST" class="draft-form">
+            <textarea name="content" placeholder="What's happening?" maxlength="280" required></textarea>
+            <div class="tweet-actions">
+                <span class="char-count">280</span>
+                <button type="submit" class="btn btn-primary">Save Draft</button>
+            </div>
+        </form>
+    </div>
+
+    <!-- Drafts Feed -->
+    <div class="tweets-feed">
+        {% if current_user.drafts %}
+        {% for draft in current_user.drafts %}
+        <div class="tweet">
+            <div class="tweet-header">
+                <strong>{{ current_user.display_name }}</strong>
+                <span class="username">@{{ current_user.username }}</span>
+                <span class="timestamp">Draft</span>
+            </div>
+            <div class="tweet-content">
+                {{ draft }}
+            </div>
+            <div class="tweet-actions">
+                <div class="draft-buttons">
+                    <form action="{{ url_for('post_draft') }}" method="POST" style="display: inline;">
+                        <input type="hidden" name="content" value="{{ draft }}">
+                        <button type="submit" class="btn btn-primary">Post Now</button>
+                    </form>
+                    <form action="{{ url_for('delete_draft') }}" method="POST" style="display: inline;">
+                        <input type="hidden" name="content" value="{{ draft }}">
+                        <button type="submit" class="btn btn-secondary">Delete</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+        {% else %}
+        <div class="empty-state">
+            <p>No drafts yet! Save some drafts to see them here.</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="who-container">
+    <h1>Who to follow</h1>
+    <div class="who-list">
+        {% for user in suggestions %}
+        <div class="who-card">
+            <div>
+                <a href="{{ url_for('profile', username=user.username) }}" class="user-link">
+                    <strong>{{ user.display_name }}</strong>
+                    <span class="username">@{{ user.username }}</span>
+                </a>
+                {% if user.bio %}<p>{{ user.bio }}</p>{% endif %}
+            </div>
+            <form action="{{ url_for('follow_user', username=user.username) }}" method="POST">
+                <button class="btn btn-primary">Follow</button>
+            </form>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endblock %}

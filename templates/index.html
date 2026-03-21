@@ -1,0 +1,108 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="home-container">
+    <!-- Tweet Box -->
+    <div class="tweet-box">
+        <form action="{{ url_for('post_tweet') }}" method="POST">
+            <textarea name="content" placeholder="What's happening?" maxlength="280" required></textarea>
+            <div class="tweet-actions">
+                <span class="char-count">280</span>
+                <button type="submit" class="btn btn-primary">Tweet</button>
+            </div>
+        </form>
+    </div>
+
+    <!-- Tweets Feed -->
+    <div class="tweets-feed">
+        {% for tweet in tweets %}
+        <div class="tweet">
+            <div class="tweet-header">
+                <a href="{{ url_for('profile', username=tweet.username) }}" class="user-link">
+                    <strong>{{ tweet.display_name }}</strong>
+                    <span class="username">@{{ tweet.username }}</span>
+                </a>
+                <span class="timestamp">{{ tweet.created_at[:16] }}</span>
+            </div>
+            <div class="tweet-content">
+                {{ tweet.parsed_content|safe }}
+                {% if tweet.is_quote and tweet.quote_to %}
+                {% set quoted = all_tweets.get(tweet.quote_to) %}
+                {% if quoted %}
+                <div class="quoted-tweet">
+                    <div><strong>{{ users.get(quoted.user_id, {}).display_name }}</strong> @{{ users.get(quoted.user_id, {}).username }}</div>
+                    <div>{{ quoted.parsed_content|safe }}</div>
+                </div>
+                {% endif %}
+                {% endif %}
+            </div>
+            <div class="tweet-stats">
+                <form action="{{ url_for('like_tweet', tweet_id=tweet.id) }}" method="POST" class="like-form">
+                    <button type="submit" class="like-btn {% if tweet.is_liked %}liked{% endif %}">
+                        {% if tweet.is_liked %}❤️{% else %}🤍{% endif %}
+                        <span>{{ tweet.like_count }}</span>
+                    </button>
+                </form>
+                <form action="{{ url_for('retweet_tweet', tweet_id=tweet.id) }}" method="POST" class="retweet-form">
+                    <button type="submit" class="retweet-btn {% if session['user_id'] in tweet.get('retweets', []) %}retweeted{% endif %}">
+                        {% if session['user_id'] in tweet.get('retweets', []) %}🔄{% else %}🔄{% endif %}
+                        <span>{{ tweet.retweet_count }}</span>
+                    </button>
+                </form>
+                <button class="reply-btn" onclick="toggleReplyForm('{{ tweet.id }}')">💬</button>
+                <a href="{{ url_for('quote_tweet', tweet_id=tweet.id) }}" class="quote-btn">📝</a>
+                {% if tweet.user_id == current_user.id %}
+                <form action="{{ url_for('delete_tweet', tweet_id=tweet.id) }}" method="POST" class="delete-form">
+                    <button type="submit" class="delete-btn" onclick="return confirm('Delete this tweet?')">🗑️</button>
+                </form>
+                {% endif %}
+            </div>
+            
+            <!-- Reply Form -->
+            <div id="reply-form-{{ tweet.id }}" class="reply-form" style="display: none;">
+                <form action="{{ url_for('reply_tweet', tweet_id=tweet.id) }}" method="POST">
+                    <textarea name="content" placeholder="Reply to this tweet..." maxlength="280" required></textarea>
+                    <div class="reply-actions">
+                        <span class="char-count">280</span>
+                        <button type="submit" class="btn btn-primary">Reply</button>
+                        <button type="button" onclick="toggleReplyForm('{{ tweet.id }}')">Cancel</button>
+                    </div>
+                </form>
+            </div>
+            
+            <!-- Display replies -->
+            {% if tweet.replies %}
+            <div class="replies">
+                {% for reply_id in tweet.replies[:3] %}
+                {% set reply = all_tweets.get(reply_id) %}
+                {% if reply %}
+                <div class="reply">
+                    <div class="reply-header">
+                        <a href="{{ url_for('profile', username=users.get(reply.user_id, {}).username) }}" class="user-link">
+                            <strong>{{ users.get(reply.user_id, {}).display_name }}</strong>
+                            <span class="username">@{{ users.get(reply.user_id, {}).username }}</span>
+                        </a>
+                        <span class="timestamp">{{ reply.created_at[:16] }}</span>
+                    </div>
+                    <div class="reply-content">
+                        {{ reply.parsed_content|safe }}
+                    </div>
+                </div>
+                {% endif %}
+                {% endfor %}
+                {% if tweet.replies|length > 3 %}
+                <div class="show-more-replies">
+                    <a href="#">{{ tweet.replies|length - 3 }} more replies</a>
+                </div>
+                {% endif %}
+            </div>
+            {% endif %}
+        </div>
+        {% else %}
+        <div class="empty-state">
+            <p>No tweets yet! Follow some users or post your first tweet.</p>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endblock %}

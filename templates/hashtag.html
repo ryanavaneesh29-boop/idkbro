@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="hashtag-container">
+    <div class="hashtag-header">
+        <h1>#{{ hashtag }}</h1>
+        <p>{{ tweets|length }} tweets</p>
+    </div>
+
+    <!-- Tweets Feed -->
+    <div class="tweets-feed">
+        {% for tweet in tweets %}
+        <div class="tweet">
+            <div class="tweet-header">
+                <a href="{{ url_for('profile', username=tweet.username) }}" class="user-link">
+                    <strong>{{ tweet.display_name }}</strong>
+                    <span class="username">@{{ tweet.username }}</span>
+                </a>
+                <span class="timestamp">{{ tweet.created_at[:16] }}</span>
+            </div>
+            <div class="tweet-content">
+                {{ tweet.parsed_content|safe }}
+            </div>
+            <div class="tweet-stats">
+                <form action="{{ url_for('like_tweet', tweet_id=tweet.id) }}" method="POST" class="like-form">
+                    <button type="submit" class="like-btn {% if tweet.is_liked %}liked{% endif %}">
+                        {% if tweet.is_liked %}❤️{% else %}🤍{% endif %}
+                        <span>{{ tweet.like_count }}</span>
+                    </button>
+                </form>
+                <form action="{{ url_for('retweet_tweet', tweet_id=tweet.id) }}" method="POST" class="retweet-form">
+                    <button type="submit" class="retweet-btn {% if session['user_id'] in tweet.get('retweets', []) %}retweeted{% endif %}">
+                        {% if session['user_id'] in tweet.get('retweets', []) %}🔄{% else %}🔄{% endif %}
+                        <span>{{ tweet.retweet_count }}</span>
+                    </button>
+                </form>
+                <button class="reply-btn" onclick="toggleReplyForm('{{ tweet.id }}')">💬</button>
+                {% if tweet.user_id == current_user.id %}
+                <form action="{{ url_for('delete_tweet', tweet_id=tweet.id) }}" method="POST" class="delete-form">
+                    <button type="submit" class="delete-btn" onclick="return confirm('Delete this tweet?')">🗑️</button>
+                </form>
+                {% endif %}
+            </div>
+            
+            <!-- Reply Form -->
+            <div id="reply-form-{{ tweet.id }}" class="reply-form" style="display: none;">
+                <form action="{{ url_for('reply_tweet', tweet_id=tweet.id) }}" method="POST">
+                    <textarea name="content" placeholder="Reply to this tweet..." maxlength="280" required></textarea>
+                    <div class="reply-actions">
+                        <span class="char-count">280</span>
+                        <button type="submit" class="btn btn-primary">Reply</button>
+                        <button type="button" onclick="toggleReplyForm('{{ tweet.id }}')">Cancel</button>
+                    </div>
+                </form>
+            </div>
+            
+            <!-- Display replies -->
+            {% if tweet.replies %}
+            <div class="replies">
+                {% for reply_id in tweet.replies[:3] %}
+                {% set reply = all_tweets.get(reply_id) %}
+                {% if reply %}
+                <div class="reply">
+                    <div class="reply-header">
+                        <a href="{{ url_for('profile', username=users.get(reply.user_id, {}).username) }}" class="user-link">
+                            <strong>{{ users.get(reply.user_id, {}).display_name }}</strong>
+                            <span class="username">@{{ users.get(reply.user_id, {}).username }}</span>
+                        </a>
+                        <span class="timestamp">{{ reply.created_at[:16] }}</span>
+                    </div>
+                    <div class="reply-content">
+                        {{ reply.parsed_content|safe }}
+                    </div>
+                </div>
+                {% endif %}
+                {% endfor %}
+                {% if tweet.replies|length > 3 %}
+                <div class="show-more-replies">
+                    <a href="#">{{ tweet.replies|length - 3 }} more replies</a>
+                </div>
+                {% endif %}
+            </div>
+            {% endif %}
+        </div>
+        {% else %}
+        <div class="empty-state">
+            <p>No tweets found with #{{ hashtag }}</p>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endblock %}

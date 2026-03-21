@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="messages-container">
+    <div class="messages-header">
+        <h1>Messages</h1>
+        <a href="{{ url_for('index') }}" class="btn btn-secondary">Back to Home</a>
+    </div>
+
+    <div class="messages-list">
+        {% for message in messages %}
+        <div class="message {% if not message.read and message.receiver_id == current_user.id %}unread{% endif %}">
+            <div class="message-header">
+                {% if message.sender_id == current_user.id %}
+                    <span class="message-direction">To:</span>
+                    <a href="{{ url_for('profile', username=users[message.receiver_id].username) }}" class="user-link">
+                        <strong>{{ users[message.receiver_id].display_name }}</strong>
+                        (@{{ users[message.receiver_id].username }})
+                    </a>
+                {% else %}
+                    <span class="message-direction">From:</span>
+                    <a href="{{ url_for('profile', username=users[message.sender_id].username) }}" class="user-link">
+                        <strong>{{ users[message.sender_id].display_name }}</strong>
+                        (@{{ users[message.sender_id].username }})
+                    </a>
+                    {% if not message.read %}
+                        <form method="post" action="{{ url_for('mark_message_read', message_id=message.id) }}" style="display: inline;">
+                            <button type="submit" class="mark-read-btn">Mark as Read</button>
+                        </form>
+                    {% endif %}
+                {% endif %}
+            </div>
+            <div class="message-content">
+                {{ message.parsed_content | safe }}
+            </div>
+            <div class="message-time">
+                {{ message.created_at[:16] }}
+            </div>
+        </div>
+        {% else %}
+        <div class="empty-state">
+            <p>No messages yet! Start a conversation by visiting someone's profile and clicking "Send Message".</p>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endblock %}
