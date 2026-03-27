@@ -13,15 +13,17 @@
             <span><strong>{{ user.followers|length }}</strong> Followers</span>
         </div>
         {% if current_user and user.id != current_user.id %}
-        <form action="{{ url_for('follow_user', username=user.username) }}" method="POST">
-            <button type="submit" class="btn {% if is_following %}btn-secondary{% else %}btn-primary{% endif %}">
-                {% if is_following %}Unfollow{% else %}Follow{% endif %}
-            </button>
-        </form>
-        <form action="{{ url_for('block_user', username=user.username) }}" method="POST">
-            <button type="submit" class="btn btn-secondary">Block</button>
-        </form>
-        <a href="{{ url_for('send_message', username=user.username) }}" class="btn btn-primary">Send Message</a>
+        <div class="profile-actions">
+            <form action="{{ url_for('follow_user', username=user.username) }}" method="POST">
+                <button type="submit" class="btn {% if is_following %}btn-secondary{% else %}btn-primary{% endif %}">
+                    {% if is_following %}Unfollow{% else %}Follow{% endif %}
+                </button>
+            </form>
+            <form action="{{ url_for('block_user', username=user.username) }}" method="POST">
+                <button type="submit" class="btn btn-secondary">Block</button>
+            </form>
+            <a href="{{ url_for('send_message', username=user.username) }}" class="btn btn-primary">Send Message</a>
+        </div>
         {% endif %}
 
         {% if current_user and user.id == current_user.id and user.pinned_tweet %}

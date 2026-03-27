@@ -88,11 +88,14 @@
                 <div id="reply-form-{{ tweet.id }}" class="reply-form" style="display: none;">
                     <form action="{{ url_for('reply_tweet', tweet_id=tweet.id) }}" method="POST" enctype="multipart/form-data">
                         <textarea name="content" placeholder="Reply to this tweet..." maxlength="280"></textarea>
-                        <input type="file" name="media" class="media-input" accept="image/*,video/*">
+                        <input type="file" id="search-reply-media-{{ tweet.id }}" name="media" class="media-input" accept="image/*,video/*">
                         <div class="reply-actions">
                             <span class="char-count">280</span>
-                            <button type="submit" class="btn btn-primary">Post</button>
-                            <button type="button" onclick="toggleReplyForm('{{ tweet.id }}')">Cancel</button>
+                            <div class="composer-actions">
+                                <label for="search-reply-media-{{ tweet.id }}" class="media-picker" title="Add photo or video">🖼️</label>
+                                <button type="submit" class="btn btn-primary">Post</button>
+                                <button type="button" onclick="toggleReplyForm('{{ tweet.id }}')">Cancel</button>
+                            </div>
                         </div>
                     </form>
                 </div>
