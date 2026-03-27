@@ -103,5 +103,24 @@
     "created_at": "2026-03-21T14:19:32.343342",
     "reset_token": null,
     "reset_token_expires_at": null
+  },
+  "9a5e02d1": {
+    "id": "9a5e02d1",
+    "username": "rytoobov",
+    "email": "rytoobov@admin.local",
+    "display_name": "Rytoobov",
+    "bio": "Admin account",
+    "password_hash": "ba30f59c2ec033f40fcd0f8dc89c9765a4d4ed51ee5140e915a8b3ccd2b43986",
+    "following": [],
+    "followers": [],
+    "drafts": [],
+    "pending_requests": [],
+    "blocked": [],
+    "is_private": false,
+    "pinned_tweet": null,
+    "created_at": "2026-03-27T12:00:00",
+    "reset_token": null,
+    "reset_token_expires_at": null,
+    "is_admin": true
   }
 }

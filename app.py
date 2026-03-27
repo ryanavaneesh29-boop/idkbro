@@ -74,7 +74,32 @@ def normalize_user_record(uid, user):
     user.setdefault('pinned_tweet', None)
     user.setdefault('reset_token', None)
     user.setdefault('reset_token_expires_at', None)
+    user.setdefault('is_admin', False)
     return user
+
+def ensure_admin_account():
+    admin_username = 'rytoobov'
+    admin_email = 'rytoobov@admin.local'
+
+    for uid, user in users.items():
+        if user.get('username') == admin_username:
+            user['is_admin'] = True
+            if not user.get('email'):
+                user['email'] = admin_email
+            return False
+
+    uid = generate_id()
+    users[uid] = normalize_user_record(uid, {
+        'id': uid,
+        'username': admin_username,
+        'email': admin_email,
+        'display_name': 'Rytoobov',
+        'bio': 'Admin account',
+        'password_hash': hash_password('change-me-admin'),
+        'created_at': datetime.now().isoformat(),
+        'is_admin': True
+    })
+    return True
 
 def parse_iso_datetime(value):
     if not value:
@@ -117,7 +142,7 @@ def send_password_reset_email(recipient_email, reset_link):
         'This link expires in 30 minutes. If you did not request this, you can ignore this email.'
     )
 
-    with smtplib.SMTP(smtp_host, smtp_port) as server:
+    with smtplib.SMTP(smtp_host, smtp_port, timeout=15) as server:
         server.starttls()
         server.login(smtp_username, smtp_password)
         server.send_message(message)
@@ -179,6 +204,8 @@ def create_notification(user_id, notification_type, from_user_id, tweet_id=None)
 # Load data at startup
 users, tweets, notifications, messages = load_data()
 users = {uid: normalize_user_record(uid, user) for uid, user in users.items()}
+if ensure_admin_account():
+    save_data(users, tweets, notifications, messages)
 
 @app.route('/')
 def index():
@@ -843,7 +870,11 @@ def pin_tweet(tweet_id):
 @login_required
 def delete_tweet(tweet_id):
     tweet = tweets.get(tweet_id)
-    if tweet and tweet['user_id'] == session['user_id']:
+    current_user = users.get(session['user_id'], {})
+    can_delete = tweet and (
+        tweet['user_id'] == session['user_id'] or current_user.get('is_admin', False)
+    )
+    if can_delete:
         del tweets[tweet_id]
         save_data(users, tweets, notifications, messages)
     return redirect(request.referrer or url_for('index'))
