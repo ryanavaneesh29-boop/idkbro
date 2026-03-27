@@ -151,6 +151,12 @@ body {
     outline: none;
 }
 
+.media-input {
+    width: 100%;
+    margin-top: 0.75rem;
+    color: #94a3b8;
+}
+
 .tweet-actions {
     display: flex;
     justify-content: space-between;
@@ -241,6 +247,22 @@ body {
     font-size: 1.1rem;
     margin-bottom: 0.5rem;
     line-height: 1.5;
+}
+
+.tweet-media {
+    margin-top: 0.9rem;
+    border-radius: 14px;
+    overflow: hidden;
+    border: 1px solid rgba(148, 163, 184, 0.2);
+    background: rgba(15, 23, 42, 0.45);
+}
+
+.tweet-media img,
+.tweet-media video {
+    display: block;
+    width: 100%;
+    max-height: 460px;
+    object-fit: cover;
 }
 
 .tweet-stats {
@@ -517,6 +539,10 @@ body {
 .reply-form textarea:focus {
     outline: none;
     border-color: #1da1f2;
+}
+
+.reply-form .media-input {
+    margin-top: 0.75rem;
 }
 
 .reply-actions {
@@ -842,6 +868,11 @@ body.light-theme .tweet:hover {
 
 body.light-theme .tweet-content {
     color: #1e293b;
+}
+
+body.light-theme .tweet-media {
+    background: rgba(241, 245, 249, 0.9);
+    border-color: rgba(148, 163, 184, 0.3);
 }
 
 body.light-theme .username {

@@ -46,7 +46,20 @@
                 <span class="username">@{{ tweet.username }}</span>
                 <span class="timestamp">{{ tweet.created_at[:16] }}</span>
             </div>
-            <div class="tweet-content">{{ tweet.content }}</div>
+            <div class="tweet-content">
+                {{ tweet.parsed_content|safe }}
+                {% if tweet.media %}
+                <div class="tweet-media">
+                    {% if tweet.media.type == 'image' %}
+                    <img src="{{ tweet.media.url }}" alt="Tweet image">
+                    {% else %}
+                    <video controls preload="metadata">
+                        <source src="{{ tweet.media.url }}">
+                    </video>
+                    {% endif %}
+                </div>
+                {% endif %}
+            </div>
             <div class="tweet-stats">
                 <span>❤️ {{ tweet.like_count }}</span>
                 <span>🔄 {{ tweet.retweet_count }}</span>

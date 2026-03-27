@@ -20,6 +20,17 @@
             </div>
             <div class="tweet-content">
                 {{ tweet.parsed_content|safe }}
+                {% if tweet.media %}
+                <div class="tweet-media">
+                    {% if tweet.media.type == 'image' %}
+                    <img src="{{ tweet.media.url }}" alt="Tweet image">
+                    {% else %}
+                    <video controls preload="metadata">
+                        <source src="{{ tweet.media.url }}">
+                    </video>
+                    {% endif %}
+                </div>
+                {% endif %}
             </div>
             <div class="tweet-stats">
                 <form action="{{ url_for('like_tweet', tweet_id=tweet.id) }}" method="POST" class="like-form">
@@ -44,8 +55,9 @@
             
             <!-- Reply Form -->
             <div id="reply-form-{{ tweet.id }}" class="reply-form" style="display: none;">
-                <form action="{{ url_for('reply_tweet', tweet_id=tweet.id) }}" method="POST">
-                    <textarea name="content" placeholder="Reply to this tweet..." maxlength="280" required></textarea>
+                <form action="{{ url_for('reply_tweet', tweet_id=tweet.id) }}" method="POST" enctype="multipart/form-data">
+                    <textarea name="content" placeholder="Reply to this tweet..." maxlength="280"></textarea>
+                    <input type="file" name="media" class="media-input" accept="image/*,video/*">
                     <div class="reply-actions">
                         <span class="char-count">280</span>
                         <button type="submit" class="btn btn-primary">Post</button>
@@ -70,6 +82,17 @@
                     </div>
                     <div class="reply-content">
                         {{ reply.parsed_content|safe }}
+                        {% if reply.media %}
+                        <div class="tweet-media">
+                            {% if reply.media.type == 'image' %}
+                            <img src="{{ reply.media.url }}" alt="Reply image">
+                            {% else %}
+                            <video controls preload="metadata">
+                                <source src="{{ reply.media.url }}">
+                            </video>
+                            {% endif %}
+                        </div>
+                        {% endif %}
                     </div>
                 </div>
                 {% endif %}

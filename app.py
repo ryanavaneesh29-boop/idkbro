@@ -10,6 +10,7 @@ from datetime import datetime, timedelta
 from email.message import EmailMessage
 from pathlib import Path
 from functools import wraps
+from werkzeug.utils import secure_filename
 
 app = Flask(__name__)
 app.secret_key = 'your-secret-key-change-this'
@@ -21,6 +22,10 @@ USERS_FILE = DATA_DIR / 'users.json'
 TWEETS_FILE = DATA_DIR / 'tweets.json'
 NOTIFICATIONS_FILE = DATA_DIR / 'notifications.json'
 MESSAGES_FILE = DATA_DIR / 'messages.json'
+UPLOAD_DIR = Path('static') / 'uploads'
+UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+ALLOWED_IMAGE_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'webp'}
+ALLOWED_VIDEO_EXTENSIONS = {'mp4', 'mov', 'webm', 'm4v'}
 
 def load_data():
     users = {}
@@ -59,6 +64,16 @@ def hash_password(password):
 def generate_id():
     return str(uuid.uuid4())[:8]
 
+def allowed_media_extension(filename):
+    if '.' not in filename:
+        return None
+    extension = filename.rsplit('.', 1)[1].lower()
+    if extension in ALLOWED_IMAGE_EXTENSIONS:
+        return 'image'
+    if extension in ALLOWED_VIDEO_EXTENSIONS:
+        return 'video'
+    return None
+
 def is_valid_email(email):
     return bool(re.fullmatch(r'[^@\s]+@[^@\s]+\.[^@\s]+', email))
 
@@ -76,6 +91,15 @@ def normalize_user_record(uid, user):
     user.setdefault('reset_token_expires_at', None)
     user.setdefault('is_admin', False)
     return user
+
+def normalize_tweet_record(tid, tweet):
+    tweet.setdefault('id', tid)
+    tweet.setdefault('likes', [])
+    tweet.setdefault('retweets', [])
+    tweet.setdefault('replies', [])
+    tweet.setdefault('parsed_content', parse_tweet_content(tweet.get('content', '')))
+    tweet.setdefault('media', None)
+    return tweet
 
 def ensure_admin_account():
     admin_username = 'rytoobov'
@@ -173,6 +197,62 @@ def parse_tweet_content(content):
     
     return content
 
+def save_uploaded_media(file_storage):
+    if not file_storage or not file_storage.filename:
+        return None, None
+
+    media_type = allowed_media_extension(file_storage.filename)
+    if not media_type:
+        return None, 'Only PNG, JPG, JPEG, GIF, WEBP, MP4, MOV, WEBM, and M4V files are supported'
+
+    filename = secure_filename(file_storage.filename)
+    unique_name = f"{uuid.uuid4().hex}_{filename}"
+    destination = UPLOAD_DIR / unique_name
+    file_storage.save(destination)
+    return {
+        'type': media_type,
+        'filename': unique_name,
+        'url': url_for('static', filename=f'uploads/{unique_name}')
+    }, None
+
+def build_tweet_view(tweet, viewer_id):
+    tweet_user = users.get(tweet['user_id'], {})
+    return {
+        **tweet,
+        'username': tweet_user.get('username', 'unknown'),
+        'display_name': tweet_user.get('display_name', 'Unknown'),
+        'is_liked': viewer_id in tweet.get('likes', []),
+        'like_count': len(tweet.get('likes', [])),
+        'retweet_count': len(tweet.get('retweets', [])),
+        'parsed_content': tweet.get('parsed_content', parse_tweet_content(tweet.get('content', '')))
+    }
+
+def is_visible_timeline_tweet(tweet):
+    return not tweet.get('reply_to')
+
+def delete_tweet_tree(tweet_id):
+    tweet = tweets.get(tweet_id)
+    if not tweet:
+        return
+
+    for reply_id in list(tweet.get('replies', [])):
+        delete_tweet_tree(reply_id)
+
+    media = tweet.get('media') or {}
+    filename = media.get('filename')
+    if filename:
+        media_path = UPLOAD_DIR / filename
+        if media_path.exists():
+            media_path.unlink()
+
+    parent_id = tweet.get('reply_to')
+    if parent_id and parent_id in tweets:
+        parent_replies = tweets[parent_id].get('replies', [])
+        if tweet_id in parent_replies:
+            parent_replies.remove(tweet_id)
+
+    del tweets[tweet_id]
+
 def login_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
@@ -204,6 +284,7 @@ def create_notification(user_id, notification_type, from_user_id, tweet_id=None)
 # Load data at startup
 users, tweets, notifications, messages = load_data()
 users = {uid: normalize_user_record(uid, user) for uid, user in users.items()}
+tweets = {tid: normalize_tweet_record(tid, tweet) for tid, tweet in tweets.items()}
 if ensure_admin_account():
     save_data(users, tweets, notifications, messages)
 
@@ -222,20 +303,14 @@ def index():
     current_user_obj = users.get(session['user_id'])
     blocked = set(current_user_obj.get('blocked', []))
     for tid, tweet in sorted(tweets.items(), key=lambda x: x[1]['created_at'], reverse=True):
+        if not is_visible_timeline_tweet(tweet):
+            continue
         if tweet['user_id'] in blocked:
             continue
         tweet_user = users.get(tweet['user_id'], {})
         if session['user_id'] in tweet_user.get('blocked', []):
             continue
-        timeline.append({
-            **tweet,
-            'username': tweet_user.get('username', 'unknown'),
-            'display_name': tweet_user.get('display_name', 'Unknown'),
-            'is_liked': session['user_id'] in tweet.get('likes', []),
-            'like_count': len(tweet.get('likes', [])),
-            'retweet_count': len(tweet.get('retweets', [])),
-            'parsed_content': tweet.get('parsed_content', parse_tweet_content(tweet.get('content', '')))
-        })
+        timeline.append(build_tweet_view(tweet, session['user_id']))
     
     return render_template('index.html', 
                          tweets=timeline[:20], 
@@ -403,7 +478,8 @@ def post_draft():
             'is_retweet': False,
             'is_quote': False,
             'quote_to': None,
-            'thread_to': None
+            'thread_to': None,
+            'media': None
         }
         save_data(users, tweets, notifications, messages)
     return redirect(url_for('index'))
@@ -432,7 +508,16 @@ def save_draft():
 @login_required
 def post_tweet():
     content = request.form['content'].strip()
-    if not content or len(content) > 280:
+    media, media_error = save_uploaded_media(request.files.get('media'))
+    if media_error:
+        return render_template('index.html',
+                             tweets=[build_tweet_view(tweet, session['user_id']) for _, tweet in sorted(tweets.items(), key=lambda x: x[1]['created_at'], reverse=True) if is_visible_timeline_tweet(tweet)][:20],
+                             current_user=users.get(session['user_id']),
+                             users=users,
+                             all_tweets=tweets,
+                             error=media_error)
+
+    if len(content) > 280 or (not content and not media):
         return redirect(url_for('index'))
 
     quote_id = request.form.get('quote_id')
@@ -449,7 +534,8 @@ def post_tweet():
         'is_retweet': False,
         'is_quote': bool(quote_id),
         'quote_to': quote_id or None,
-        'thread_to': None
+        'thread_to': None,
+        'media': media
     }
 
     # if quote, we can create reference link in template
@@ -481,7 +567,10 @@ def quote_tweet(tweet_id):
 
     if request.method == 'POST':
         content = request.form['content'].strip()
-        if not content or len(content) > 280:
+        media, media_error = save_uploaded_media(request.files.get('media'))
+        if media_error:
+            return render_template('quote.html', tweet=tweet, current_user=users.get(session['user_id']), error=media_error)
+        if len(content) > 280 or (not content and not media):
             return redirect(url_for('index'))
         qid = generate_id()
         tweets[qid] = {
@@ -496,7 +585,8 @@ def quote_tweet(tweet_id):
             'is_retweet': False,
             'is_quote': True,
             'quote_to': tweet_id,
-            'thread_to': None
+            'thread_to': None,
+            'media': media
         }
         create_notification(tweet['user_id'], 'quote', session['user_id'], tweet_id)
         save_data(users, tweets, notifications, messages)
@@ -508,10 +598,12 @@ def quote_tweet(tweet_id):
 @login_required
 def reply_tweet(tweet_id):
 
-
-
     content = request.form['content'].strip()
-    if not content or len(content) > 280:
+    media, media_error = save_uploaded_media(request.files.get('media'))
+    if media_error:
+        return redirect(request.referrer or url_for('index'))
+
+    if len(content) > 280 or (not content and not media):
         return redirect(request.referrer or url_for('index'))
     
     original_tweet = tweets.get(tweet_id)
@@ -529,7 +621,8 @@ def reply_tweet(tweet_id):
         'retweets': [],
         'replies': [],
         'is_retweet': False,
-        'reply_to': tweet_id
+        'reply_to': tweet_id,
+        'media': media
     }
     
     # Add reply to original tweet's replies list
@@ -639,15 +732,10 @@ def profile(username):
 
     if allow_view:
         for tid, tweet in sorted(tweets.items(), key=lambda x: x[1]['created_at'], reverse=True):
+            if not is_visible_timeline_tweet(tweet):
+                continue
             if tweet['user_id'] == target_user['id']:
-                user_tweets.append({
-                **tweet,
-                'username': target_user['username'],
-                'display_name': target_user['display_name'],
-                'is_liked': session.get('user_id') in tweet.get('likes', []),
-                'like_count': len(tweet.get('likes', [])),
-                'retweet_count': len(tweet.get('retweets', []))
-            })
+                user_tweets.append(build_tweet_view(tweet, session.get('user_id')))
     
     is_following = False
     if 'user_id' in session:
@@ -688,17 +776,10 @@ def hashtag(hashtag):
     # Find tweets containing this hashtag
     hashtag_tweets = []
     for tid, tweet in tweets.items():
+        if not is_visible_timeline_tweet(tweet):
+            continue
         if f'#{hashtag}' in tweet.get('content', '').lower():
-            tweet_user = users.get(tweet['user_id'], {})
-            hashtag_tweets.append({
-                **tweet,
-                'username': tweet_user.get('username', 'unknown'),
-                'display_name': tweet_user.get('display_name', 'Unknown'),
-                'is_liked': session['user_id'] in tweet.get('likes', []),
-                'like_count': len(tweet.get('likes', [])),
-                'retweet_count': len(tweet.get('retweets', [])),
-                'parsed_content': tweet.get('parsed_content', parse_tweet_content(tweet.get('content', '')))
-            })
+            hashtag_tweets.append(build_tweet_view(tweet, session['user_id']))
     
     # Sort by creation date
     hashtag_tweets.sort(key=lambda x: x['created_at'], reverse=True)
@@ -721,17 +802,10 @@ def search():
     if query:
         # Search tweets
         for tid, tweet in tweets.items():
+            if not is_visible_timeline_tweet(tweet):
+                continue
             if query.lower() in tweet.get('content', '').lower():
-                tweet_user = users.get(tweet['user_id'], {})
-                search_results['tweets'].append({
-                    **tweet,
-                    'username': tweet_user.get('username', 'unknown'),
-                    'display_name': tweet_user.get('display_name', 'Unknown'),
-                    'is_liked': session.get('user_id') in tweet.get('likes', []),
-                    'like_count': len(tweet.get('likes', [])),
-                    'retweet_count': len(tweet.get('retweets', [])),
-                    'parsed_content': tweet.get('parsed_content', parse_tweet_content(tweet.get('content', '')))
-                })
+                search_results['tweets'].append(build_tweet_view(tweet, session.get('user_id')))
         
         # Search users
         for uid, user in users.items():
@@ -875,7 +949,7 @@ def delete_tweet(tweet_id):
         tweet['user_id'] == session['user_id'] or current_user.get('is_admin', False)
     )
     if can_delete:
-        del tweets[tweet_id]
+        delete_tweet_tree(tweet_id)
         save_data(users, tweets, notifications, messages)
     return redirect(request.referrer or url_for('index'))
 
