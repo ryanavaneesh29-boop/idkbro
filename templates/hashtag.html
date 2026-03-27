@@ -61,7 +61,12 @@
                     <div class="reply-actions">
                         <span class="char-count">280</span>
                         <div class="composer-actions">
-                            <label for="hashtag-reply-media-{{ tweet.id }}" class="media-picker" title="Add photo or video">🖼️</label>
+                            <label for="hashtag-reply-media-{{ tweet.id }}" class="media-picker" title="Add photo or video" aria-label="Add photo or video">
+                                <svg viewBox="0 0 24 24" aria-hidden="true">
+                                    <path d="M6 7.5A2.5 2.5 0 0 1 8.5 5h1.2l.9-1.2A1.5 1.5 0 0 1 11.8 3h.4a1.5 1.5 0 0 1 1.2.8l.9 1.2h1.2A2.5 2.5 0 0 1 18 7.5v8A2.5 2.5 0 0 1 15.5 18h-7A2.5 2.5 0 0 1 6 15.5z"/>
+                                    <circle cx="12" cy="11.5" r="2.75"/>
+                                </svg>
+                            </label>
                             <button type="submit" class="btn btn-primary">Post</button>
                             <button type="button" onclick="toggleReplyForm('{{ tweet.id }}')">Cancel</button>
                         </div>
