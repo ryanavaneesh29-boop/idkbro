@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+
+{% block title %}{{ page_title }} - idkbro{% endblock %}
+
+{% block content %}
+<div class="who-container">
+    <div class="connections-header">
+        <h1>{{ page_heading }}</h1>
+        <p><a href="{{ url_for('profile', username=page_user.username) }}" class="user-link">{{ page_user.display_name }}</a> @{{ page_user.username }}</p>
+    </div>
+    <div class="who-list">
+        {% for user in connections %}
+        <div class="who-card">
+            <div>
+                <a href="{{ url_for('profile', username=user.username) }}" class="user-link">
+                    <strong>{{ user.display_name }}</strong>
+                    <span class="username">@{{ user.username }}</span>
+                </a>
+                {% if user.bio %}<p>{{ user.bio }}</p>{% endif %}
+            </div>
+            {% if current_user and user.id != current_user.id %}
+            <form action="{{ url_for('follow_user', username=user.username) }}" method="POST">
+                <button class="btn {% if user.is_following %}btn-secondary{% else %}btn-primary{% endif %}">
+                    {% if user.is_following %}Unfollow{% else %}Follow{% endif %}
+                </button>
+            </form>
+            {% endif %}
+        </div>
+        {% else %}
+        <div class="empty-state">
+            <p>No users to show yet.</p>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endblock %}

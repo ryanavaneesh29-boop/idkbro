@@ -9,8 +9,8 @@
         <p class="username">@{{ user.username }}</p>
         <p class="bio">{{ user.bio or 'No bio yet' }}</p>
         <div class="stats">
-            <span><strong>{{ user.following|length }}</strong> Following</span>
-            <span><strong>{{ user.followers|length }}</strong> Followers</span>
+            <a href="{{ url_for('following_list', username=user.username) }}" class="stat-link"><strong>{{ user.following|length }}</strong> Following</a>
+            <a href="{{ url_for('followers_list', username=user.username) }}" class="stat-link"><strong>{{ user.followers|length }}</strong> Followers</a>
         </div>
         {% if current_user and user.id != current_user.id %}
         <div class="profile-actions">

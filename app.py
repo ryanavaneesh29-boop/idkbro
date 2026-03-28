@@ -253,6 +253,18 @@ def delete_tweet_tree(tweet_id):
 
     del tweets[tweet_id]
 
+def build_user_list_entry(user_id, viewer_id):
+    user = users.get(user_id)
+    if not user:
+        return None
+    return {
+        'id': user_id,
+        'username': user.get('username', 'unknown'),
+        'display_name': user.get('display_name', 'Unknown'),
+        'bio': user.get('bio', ''),
+        'is_following': viewer_id in user.get('followers', [])
+    }
+
 def login_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
@@ -762,6 +774,50 @@ def who_to_follow():
         candidates.append({'id': uid, **user, 'follower_count': len(user.get('followers', []))})
     candidates.sort(key=lambda u: u['follower_count'], reverse=True)
     return render_template('who_to_follow.html', current_user=current_user, suggestions=candidates[:8])
+
+@app.route('/user/<username>/following')
+def following_list(username):
+    uid, target_user = get_user_by_username(username)
+    if not target_user:
+        return 'User not found', 404
+
+    viewer_id = session.get('user_id')
+    following_users = []
+    for followed_id in target_user.get('following', []):
+        entry = build_user_list_entry(followed_id, viewer_id)
+        if entry:
+            following_users.append(entry)
+
+    return render_template(
+        'user_connections.html',
+        page_title=f"{target_user['display_name']} is following",
+        page_heading='Following',
+        page_user=target_user,
+        connections=following_users,
+        current_user=users.get(viewer_id)
+    )
+
+@app.route('/user/<username>/followers')
+def followers_list(username):
+    uid, target_user = get_user_by_username(username)
+    if not target_user:
+        return 'User not found', 404
+
+    viewer_id = session.get('user_id')
+    follower_users = []
+    for follower_id in target_user.get('followers', []):
+        entry = build_user_list_entry(follower_id, viewer_id)
+        if entry:
+            follower_users.append(entry)
+
+    return render_template(
+        'user_connections.html',
+        page_title=f"People following {target_user['display_name']}",
+        page_heading='Followers',
+        page_user=target_user,
+        connections=follower_users,
+        current_user=users.get(viewer_id)
+    )
 
 @app.route('/hashtag/<hashtag>')
 def hashtag(hashtag):
