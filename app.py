@@ -265,6 +265,48 @@ def build_user_list_entry(user_id, viewer_id):
         'is_following': viewer_id in user.get('followers', [])
     }
 
+def get_conversation_messages(current_user_id, other_user_id):
+    convo = []
+    for message in messages.values():
+        participants = {message['sender_id'], message['receiver_id']}
+        if participants == {current_user_id, other_user_id}:
+            convo.append({
+                **message,
+                'is_from_current_user': message['sender_id'] == current_user_id
+            })
+    convo.sort(key=lambda item: item['created_at'])
+    return convo
+
+def build_conversation_summaries(current_user_id):
+    conversations = {}
+    for message in messages.values():
+        if current_user_id not in (message['sender_id'], message['receiver_id']):
+            continue
+
+        other_user_id = message['receiver_id'] if message['sender_id'] == current_user_id else message['sender_id']
+        other_user = users.get(other_user_id)
+        if not other_user:
+            continue
+
+        summary = conversations.setdefault(other_user_id, {
+            'user_id': other_user_id,
+            'username': other_user.get('username', 'unknown'),
+            'display_name': other_user.get('display_name', 'Unknown'),
+            'bio': other_user.get('bio', ''),
+            'last_message': '',
+            'last_message_at': '',
+            'unread_count': 0
+        })
+
+        if not summary['last_message_at'] or message['created_at'] > summary['last_message_at']:
+            summary['last_message'] = message.get('content', '')
+            summary['last_message_at'] = message['created_at']
+
+        if message['receiver_id'] == current_user_id and not message.get('read', False):
+            summary['unread_count'] += 1
+
+    return sorted(conversations.values(), key=lambda item: item['last_message_at'], reverse=True)
+
 def login_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
@@ -1013,34 +1055,25 @@ def delete_tweet(tweet_id):
 @login_required
 def messages_page():
     current_user = users.get(session['user_id'])
-    user_messages = []
-    
-    # Get all messages where current user is sender or receiver
-    for mid, message in messages.items():
-        if message['sender_id'] == session['user_id'] or message['receiver_id'] == session['user_id']:
-            user_messages.append(message)
-    
-    # Sort by created_at descending
-    user_messages.sort(key=lambda x: x['created_at'], reverse=True)
-    
-    return render_template('messages.html', 
-                         messages=user_messages[:50],  # Limit to 50
-                         current_user=current_user,
-                         users=users)
+    conversations = build_conversation_summaries(session['user_id'])
+    return render_template(
+        'messages.html',
+        conversations=conversations,
+        current_user=current_user
+    )
 
-@app.route('/send_message/<username>', methods=['GET', 'POST'])
+@app.route('/messages/<username>', methods=['GET', 'POST'])
 @login_required
-def send_message(username):
+def message_thread(username):
     uid, target_user = get_user_by_username(username)
     if not target_user or uid == session['user_id']:
-        return redirect(url_for('index'))
-    
+        return redirect(url_for('messages_page'))
+
     current_user = users.get(session['user_id'])
-    
-    # Check if blocked
+
     if session['user_id'] in target_user.get('blocked', []) or uid in current_user.get('blocked', []):
-        return redirect(url_for('index'))
-    
+        return redirect(url_for('messages_page'))
+
     if request.method == 'POST':
         content = request.form['content'].strip()
         if content and len(content) <= 280:
@@ -1055,11 +1088,31 @@ def send_message(username):
                 'read': False
             }
             save_data(users, tweets, notifications, messages)
-            return redirect(url_for('messages_page'))
-    
-    return render_template('send_message.html', 
-                         target_user=target_user,
-                         current_user=current_user)
+            return redirect(url_for('message_thread', username=username))
+
+    conversation_messages = get_conversation_messages(session['user_id'], uid)
+    changed = False
+    for message in conversation_messages:
+        source = messages.get(message['id'])
+        if source and source['receiver_id'] == session['user_id'] and not source.get('read', False):
+            source['read'] = True
+            changed = True
+    if changed:
+        save_data(users, tweets, notifications, messages)
+        conversation_messages = get_conversation_messages(session['user_id'], uid)
+
+    return render_template(
+        'message_thread.html',
+        target_user=target_user,
+        messages=conversation_messages,
+        current_user=current_user,
+        conversations=build_conversation_summaries(session['user_id'])
+    )
+
+@app.route('/send_message/<username>', methods=['GET', 'POST'])
+@login_required
+def send_message(username):
+    return redirect(url_for('message_thread', username=username))
 
 @app.route('/mark_message_read/<message_id>', methods=['POST'])
 @login_required
@@ -1068,6 +1121,10 @@ def mark_message_read(message_id):
     if message and message['receiver_id'] == session['user_id']:
         message['read'] = True
         save_data(users, tweets, notifications, messages)
+    other_user_id = message['sender_id'] if message else None
+    other_user = users.get(other_user_id, {}) if other_user_id else {}
+    if other_user.get('username'):
+        return redirect(url_for('message_thread', username=other_user['username']))
     return redirect(url_for('messages_page'))
 
 if __name__ == '__main__':

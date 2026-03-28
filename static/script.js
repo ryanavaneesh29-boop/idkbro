@@ -11,6 +11,20 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
+    const threadComposer = document.querySelector('.thread-compose textarea');
+    const threadCharCount = document.querySelector('.thread-compose .char-count');
+
+    if (threadComposer && threadCharCount) {
+        const updateThreadCount = function() {
+            const remaining = 280 - threadComposer.value.length;
+            threadCharCount.textContent = remaining;
+            threadCharCount.style.color = remaining < 20 ? '#ff4444' : '#8899a6';
+        };
+
+        threadComposer.addEventListener('input', updateThreadCount);
+        updateThreadCount();
+    }
+
     // Mobile menu toggle
     const mobileMenuToggle = document.querySelector('.mobile-menu-toggle');
     const navLinks = document.querySelector('.nav-links');

@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+
+{% block title %}Messages with {{ target_user.display_name }}{% endblock %}
+
+{% block content %}
+<div class="messages-shell">
+    <aside class="inbox-panel">
+        <div class="messages-header">
+            <h1>Messages</h1>
+        </div>
+        <div class="conversation-list">
+            {% for conversation in conversations %}
+            <a href="{{ url_for('message_thread', username=conversation.username) }}" class="conversation-card {% if conversation.username == target_user.username %}active{% endif %} {% if conversation.unread_count and conversation.username != target_user.username %}unread{% endif %}">
+                <div class="conversation-top">
+                    <div>
+                        <strong>{{ conversation.display_name }}</strong>
+                        <span class="username">@{{ conversation.username }}</span>
+                    </div>
+                    {% if conversation.last_message_at %}
+                    <span class="message-time">{{ conversation.last_message_at[:16] }}</span>
+                    {% endif %}
+                </div>
+                <p class="conversation-preview">{{ conversation.last_message or 'No messages yet' }}</p>
+                {% if conversation.unread_count and conversation.username != target_user.username %}
+                <span class="unread-pill">{{ conversation.unread_count }} new</span>
+                {% endif %}
+            </a>
+            {% endfor %}
+        </div>
+    </aside>
+
+    <section class="thread-panel">
+        <div class="thread-header">
+            <div>
+                <h2>{{ target_user.display_name }}</h2>
+                <p class="username">@{{ target_user.username }}</p>
+            </div>
+            <a href="{{ url_for('profile', username=target_user.username) }}" class="btn btn-secondary">View Profile</a>
+        </div>
+
+        <div class="thread-messages">
+            {% for message in messages %}
+            <article class="chat-bubble {% if message.is_from_current_user %}sent{% else %}received{% endif %}">
+                <div class="chat-body">{{ message.parsed_content|safe }}</div>
+                <div class="chat-meta">
+                    <span>{{ message.created_at[:16] }}</span>
+                    {% if message.is_from_current_user %}
+                    <span>{{ 'Read' if message.read else 'Sent' }}</span>
+                    {% endif %}
+                </div>
+            </article>
+            {% else %}
+            <div class="empty-state">
+                <p>No messages yet. Send the first one below.</p>
+            </div>
+            {% endfor %}
+        </div>
+
+        <form action="{{ url_for('message_thread', username=target_user.username) }}" method="POST" class="thread-compose">
+            <textarea name="content" rows="3" maxlength="280" placeholder="Write a message..." required></textarea>
+            <div class="thread-compose-actions">
+                <span class="char-count">280</span>
+                <button type="submit" class="btn btn-primary">Send</button>
+            </div>
+        </form>
+    </section>
+</div>
+{% endblock %}

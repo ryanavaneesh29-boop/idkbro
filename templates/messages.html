@@ -1,47 +1,40 @@
 {% extends "base.html" %}
 
 {% block content %}
-<div class="messages-container">
-    <div class="messages-header">
-        <h1>Messages</h1>
-        <a href="{{ url_for('index') }}" class="btn btn-secondary">Back to Home</a>
-    </div>
-
-    <div class="messages-list">
-        {% for message in messages %}
-        <div class="message {% if not message.read and message.receiver_id == current_user.id %}unread{% endif %}">
-            <div class="message-header">
-                {% if message.sender_id == current_user.id %}
-                    <span class="message-direction">To:</span>
-                    <a href="{{ url_for('profile', username=users[message.receiver_id].username) }}" class="user-link">
-                        <strong>{{ users[message.receiver_id].display_name }}</strong>
-                        (@{{ users[message.receiver_id].username }})
-                    </a>
-                {% else %}
-                    <span class="message-direction">From:</span>
-                    <a href="{{ url_for('profile', username=users[message.sender_id].username) }}" class="user-link">
-                        <strong>{{ users[message.sender_id].display_name }}</strong>
-                        (@{{ users[message.sender_id].username }})
-                    </a>
-                    {% if not message.read %}
-                        <form method="post" action="{{ url_for('mark_message_read', message_id=message.id) }}" style="display: inline;">
-                            <button type="submit" class="mark-read-btn">Mark as Read</button>
-                        </form>
+<div class="messages-shell">
+    <aside class="inbox-panel">
+        <div class="messages-header">
+            <h1>Messages</h1>
+        </div>
+        <div class="conversation-list">
+            {% for conversation in conversations %}
+            <a href="{{ url_for('message_thread', username=conversation.username) }}" class="conversation-card {% if conversation.unread_count %}unread{% endif %}">
+                <div class="conversation-top">
+                    <div>
+                        <strong>{{ conversation.display_name }}</strong>
+                        <span class="username">@{{ conversation.username }}</span>
+                    </div>
+                    {% if conversation.last_message_at %}
+                    <span class="message-time">{{ conversation.last_message_at[:16] }}</span>
                     {% endif %}
+                </div>
+                <p class="conversation-preview">{{ conversation.last_message or 'No messages yet' }}</p>
+                {% if conversation.unread_count %}
+                <span class="unread-pill">{{ conversation.unread_count }} new</span>
                 {% endif %}
+            </a>
+            {% else %}
+            <div class="empty-state">
+                <p>No conversations yet. Start one from a user's profile.</p>
             </div>
-            <div class="message-content">
-                {{ message.parsed_content | safe }}
-            </div>
-            <div class="message-time">
-                {{ message.created_at[:16] }}
-            </div>
+            {% endfor %}
         </div>
-        {% else %}
+    </aside>
+
+    <section class="thread-panel thread-empty">
         <div class="empty-state">
-            <p>No messages yet! Start a conversation by visiting someone's profile and clicking "Send Message".</p>
+            <p>Pick a conversation to open the chat.</p>
         </div>
-        {% endfor %}
-    </div>
+    </section>
 </div>
 {% endblock %}
