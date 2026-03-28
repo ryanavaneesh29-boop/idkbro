@@ -16,13 +16,14 @@ app = Flask(__name__)
 app.secret_key = 'your-secret-key-change-this'
 
 # Data storage
-DATA_DIR = Path('data')
+BASE_DIR = Path(__file__).resolve().parent
+DATA_DIR = BASE_DIR / 'data'
 DATA_DIR.mkdir(exist_ok=True)
 USERS_FILE = DATA_DIR / 'users.json'
 TWEETS_FILE = DATA_DIR / 'tweets.json'
 NOTIFICATIONS_FILE = DATA_DIR / 'notifications.json'
 MESSAGES_FILE = DATA_DIR / 'messages.json'
-UPLOAD_DIR = Path('static') / 'uploads'
+UPLOAD_DIR = BASE_DIR / 'static' / 'uploads'
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 ALLOWED_IMAGE_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'webp'}
 ALLOWED_VIDEO_EXTENSIONS = {'mp4', 'mov', 'webm', 'm4v'}
