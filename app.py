@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, redirect, url_for, session
+from flask import Flask, app, render_template, request, redirect, url_for, session
 import json
 import hashlib
 import uuid
@@ -12,8 +12,8 @@ from pathlib import Path
 from functools import wraps
 from werkzeug.utils import secure_filename
 
-app = Flask(__name__)
-app.secret_key = 'your-secret-key-change-this'
+app.secret_key = os.getenv('FLASK_SECRET_KEY')
+app.secret_key = os.getenv('FLASK_SECRET_KEY', secrets.token_hex(54))
 
 # Data storage
 BASE_DIR = Path(__file__).resolve().parent
