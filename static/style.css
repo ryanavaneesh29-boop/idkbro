@@ -374,6 +374,28 @@ body {
     cursor: pointer;
 }
 
+.tweet-detail-link {
+    color: inherit;
+    text-decoration: none;
+}
+
+.tweet-detail-link:hover {
+    text-decoration: none;
+}
+
+.tweet-open-link {
+    display: inline-flex;
+    width: fit-content;
+    margin-top: 0.6rem;
+    color: #60a5fa;
+    font-size: 0.92rem;
+    text-decoration: none;
+}
+
+.tweet-open-link:hover {
+    text-decoration: underline;
+}
+
 .tweet[data-tweet-url]:hover {
     border-color: #4b5563;
 }

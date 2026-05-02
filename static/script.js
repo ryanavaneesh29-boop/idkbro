@@ -123,13 +123,15 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    document.querySelectorAll('.tweet[data-tweet-url]').forEach(function(tweetCard) {
-        tweetCard.addEventListener('click', function(event) {
-            if (event.target.closest('a, button, form, input, textarea, label, video, .reply-form, .replies')) {
-                return;
-            }
-            window.location.href = tweetCard.dataset.tweetUrl;
-        });
+    document.addEventListener('click', function(event) {
+        const tweetCard = event.target.closest('.tweet[data-tweet-url]');
+        if (!tweetCard) {
+            return;
+        }
+        if (event.target.closest('a, button, form, input, textarea, label, video, .reply-form, .replies')) {
+            return;
+        }
+        window.location.href = tweetCard.dataset.tweetUrl;
     });
 });
 

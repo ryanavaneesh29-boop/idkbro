@@ -48,7 +48,9 @@
             <div class="tweet-header">
                 <strong>{{ tweet.display_name }}</strong>
                 <span class="username">@{{ tweet.username }}</span>
-                <span class="timestamp">{{ tweet.created_at[:16] }}</span>
+                <a href="{{ url_for('tweet_detail', tweet_id=tweet.id) }}" class="tweet-detail-link">
+                    <span class="timestamp">{{ tweet.created_at[:16] }}</span>
+                </a>
             </div>
             <div class="tweet-content">
                 {{ tweet.parsed_content|safe }}
@@ -64,6 +66,7 @@
                 </div>
                 {% endif %}
             </div>
+            <a href="{{ url_for('tweet_detail', tweet_id=tweet.id) }}" class="tweet-open-link">Open tweet</a>
             <div class="tweet-stats">
                 <span>❤️ {{ tweet.like_count }}</span>
                 <span>🔄 {{ tweet.retweet_count }}</span>
