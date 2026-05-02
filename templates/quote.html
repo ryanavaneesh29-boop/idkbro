@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+
+{% block title %}Quote Tweet - idkbro{% endblock %}
+
+{% block content %}
+<div class="home-container">
+    <div class="tweet-box">
+        <h2>Quote Tweet</h2>
+        {% if error %}
+        <div class="error">{{ error }}</div>
+        {% endif %}
+        <div class="quoted-tweet">
+            <div><strong>{{ users.get(tweet.user_id, {}).display_name }}</strong> @{{ users.get(tweet.user_id, {}).username }}</div>
+            <div>{{ tweet.parsed_content|safe }}</div>
+        </div>
+        <form action="{{ url_for('quote_tweet', tweet_id=tweet.id) }}" method="POST" enctype="multipart/form-data">
+            <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+            <textarea name="content" placeholder="Add your thoughts..." maxlength="280"></textarea>
+            <input type="file" id="quote-media" name="media" class="media-input" accept="image/*,video/*">
+            <div class="tweet-actions">
+                <span class="char-count">280</span>
+                <div class="composer-actions">
+                    <label for="quote-media" class="media-picker" title="Add photo or video" aria-label="Add photo or video">
+                        <svg viewBox="0 0 24 24" aria-hidden="true">
+                            <rect x="3.5" y="4.5" width="17" height="15" rx="3" ry="3"/>
+                            <circle cx="8.2" cy="9" r="1.8"/>
+                            <path d="M5.5 16l4.2-4.2a1 1 0 0 1 1.4 0l2.2 2.2a1 1 0 0 0 1.4 0l1.7-1.7a1 1 0 0 1 1.4 0L20.5 15"/>
+                        </svg>
+                    </label>
+                    <button type="submit" class="btn btn-primary">Post</button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

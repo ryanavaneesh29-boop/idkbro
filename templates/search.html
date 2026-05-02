@@ -31,6 +31,7 @@
                 </div>
                 {% if user.id != current_user.id %}
                 <form action="{{ url_for('follow_user', username=user.username) }}" method="POST" class="follow-form">
+                    <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
                     <button type="submit" class="btn {% if user.is_following %}btn-secondary{% else %}btn-primary{% endif %}">
                         {% if user.is_following %}Unfollow{% else %}Follow{% endif %}
                     </button>
@@ -70,12 +71,14 @@
                 </div>
                 <div class="tweet-stats">
                     <form action="{{ url_for('like_tweet', tweet_id=tweet.id) }}" method="POST" class="like-form">
+                        <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
                         <button type="submit" class="like-btn {% if tweet.is_liked %}liked{% endif %}">
                             {% if tweet.is_liked %}❤️{% else %}🤍{% endif %}
                             <span>{{ tweet.like_count }}</span>
                         </button>
                     </form>
                     <form action="{{ url_for('retweet_tweet', tweet_id=tweet.id) }}" method="POST" class="retweet-form">
+                        <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
                         <button type="submit" class="retweet-btn {% if session['user_id'] in tweet.get('retweets', []) %}retweeted{% endif %}">
                             {% if session['user_id'] in tweet.get('retweets', []) %}🔄{% else %}🔄{% endif %}
                             <span>{{ tweet.retweet_count }}</span>
@@ -85,8 +88,9 @@
                 </div>
                 
                 <!-- Reply Form -->
-                <div id="reply-form-{{ tweet.id }}" class="reply-form" style="display: none;">
+                <div id="reply-form-{{ tweet.id }}" class="reply-form is-hidden">
                     <form action="{{ url_for('reply_tweet', tweet_id=tweet.id) }}" method="POST" enctype="multipart/form-data">
+                        <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
                         <textarea name="content" placeholder="Reply to this tweet..." maxlength="280"></textarea>
                         <input type="file" id="search-reply-media-{{ tweet.id }}" name="media" class="media-input" accept="image/*,video/*">
                         <div class="reply-actions">

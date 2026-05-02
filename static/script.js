@@ -25,6 +25,19 @@ document.addEventListener('DOMContentLoaded', function() {
         updateThreadCount();
     }
 
+    const directMessageComposer = document.getElementById('content');
+    const directMessageCharCount = document.getElementById('char-count');
+
+    if (directMessageComposer && directMessageCharCount) {
+        const updateDirectMessageCount = function() {
+            directMessageCharCount.textContent = directMessageComposer.value.length;
+            directMessageCharCount.classList.toggle('over-limit', directMessageComposer.value.length > 280);
+        };
+
+        directMessageComposer.addEventListener('input', updateDirectMessageCount);
+        updateDirectMessageCount();
+    }
+
     // Mobile menu toggle
     const mobileMenuToggle = document.querySelector('.mobile-menu-toggle');
     const navLinks = document.querySelector('.nav-links');
@@ -65,6 +78,6 @@ document.addEventListener('DOMContentLoaded', function() {
 function toggleReplyForm(tweetId) {
     const form = document.getElementById('reply-form-' + tweetId);
     if (form) {
-        form.style.display = form.style.display === 'none' ? 'block' : 'none';
+        form.classList.toggle('is-hidden');
     }
 }

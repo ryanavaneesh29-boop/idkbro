@@ -2,3 +2,6 @@ __pycache__/
 *.pyc
 .env
 data/*.json
+data/*.sqlite3
+data/uploads/
+static/uploads/

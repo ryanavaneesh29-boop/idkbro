@@ -6,6 +6,7 @@
 <div class="auth-container">
     <h2>Send Message to {{ target_user.display_name }}</h2>
     <form method="POST">
+        <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
         <div class="form-group">
             <label for="content">Message</label>
             <textarea name="content" id="content" rows="4" maxlength="280" placeholder="What's on your mind?" required></textarea>
@@ -20,20 +21,4 @@
         <a href="{{ url_for('profile', username=target_user.username) }}">Back to Profile</a>
     </p>
 </div>
-
-<script>
-document.addEventListener('DOMContentLoaded', function() {
-    const textarea = document.getElementById('content');
-    const charCount = document.getElementById('char-count');
-    
-    textarea.addEventListener('input', function() {
-        charCount.textContent = this.value.length;
-        if (this.value.length > 280) {
-            charCount.style.color = 'red';
-        } else {
-            charCount.style.color = '';
-        }
-    });
-});
-</script>
 {% endblock %}

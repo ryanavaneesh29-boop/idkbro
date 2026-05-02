@@ -57,6 +57,7 @@
         </div>
 
         <form action="{{ url_for('message_thread', username=target_user.username) }}" method="POST" class="thread-compose">
+            <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
             <textarea name="content" rows="3" maxlength="280" placeholder="Write a message..." required></textarea>
             <div class="thread-compose-actions">
                 <span class="char-count">280</span>

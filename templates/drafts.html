@@ -6,6 +6,7 @@
     <div class="tweet-box">
         <h2>Save a Draft</h2>
         <form action="{{ url_for('drafts') }}" method="POST" class="draft-form">
+            <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
             <textarea name="content" placeholder="What's happening?" maxlength="280" required></textarea>
             <div class="tweet-actions">
                 <span class="char-count">280</span>
@@ -29,11 +30,13 @@
             </div>
             <div class="tweet-actions">
                 <div class="draft-buttons">
-                    <form action="{{ url_for('post_draft') }}" method="POST" style="display: inline;">
+                    <form action="{{ url_for('post_draft') }}" method="POST" class="inline-form">
+                        <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
                         <input type="hidden" name="content" value="{{ draft }}">
                         <button type="submit" class="btn btn-primary">Post Now</button>
                     </form>
-                    <form action="{{ url_for('delete_draft') }}" method="POST" style="display: inline;">
+                    <form action="{{ url_for('delete_draft') }}" method="POST" class="inline-form">
+                        <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
                         <input type="hidden" name="content" value="{{ draft }}">
                         <button type="submit" class="btn btn-secondary">Delete</button>
                     </form>

@@ -8,6 +8,7 @@
         <div class="error">{{ error }}</div>
         {% endif %}
         <form action="{{ url_for('post_tweet') }}" method="POST" enctype="multipart/form-data">
+            <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
             <textarea name="content" placeholder="What's happening?" maxlength="280"></textarea>
             <input type="file" id="tweet-media" name="media" class="media-input" accept="image/*,video/*">
             <div class="tweet-actions">
@@ -52,7 +53,7 @@
                 {% endif %}
                 {% if tweet.is_quote and tweet.quote_to %}
                 {% set quoted = all_tweets.get(tweet.quote_to) %}
-                {% if quoted %}
+                {% if quoted and can_render_embedded_tweet(tweet.quote_to, viewer_id) %}
                 <div class="quoted-tweet">
                     <div><strong>{{ users.get(quoted.user_id, {}).display_name }}</strong> @{{ users.get(quoted.user_id, {}).username }}</div>
                     <div>{{ quoted.parsed_content|safe }}</div>
@@ -73,12 +74,14 @@
             </div>
             <div class="tweet-stats">
                 <form action="{{ url_for('like_tweet', tweet_id=tweet.id) }}" method="POST" class="like-form">
+                    <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
                     <button type="submit" class="like-btn {% if tweet.is_liked %}liked{% endif %}">
                         {% if tweet.is_liked %}❤️{% else %}🤍{% endif %}
                         <span>{{ tweet.like_count }}</span>
                     </button>
                 </form>
                 <form action="{{ url_for('retweet_tweet', tweet_id=tweet.id) }}" method="POST" class="retweet-form">
+                    <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
                     <button type="submit" class="retweet-btn {% if session['user_id'] in tweet.get('retweets', []) %}retweeted{% endif %}">
                         {% if session['user_id'] in tweet.get('retweets', []) %}🔄{% else %}🔄{% endif %}
                         <span>{{ tweet.retweet_count }}</span>
@@ -88,14 +91,16 @@
                 <a href="{{ url_for('quote_tweet', tweet_id=tweet.id) }}" class="quote-btn">📝</a>
                 {% if tweet.user_id == current_user.id or current_user.is_admin %}
                 <form action="{{ url_for('delete_tweet', tweet_id=tweet.id) }}" method="POST" class="delete-form">
+                    <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
                     <button type="submit" class="delete-btn" onclick="return confirm('Delete this tweet?')">🗑️</button>
                 </form>
                 {% endif %}
             </div>
             
             <!-- Reply Form -->
-            <div id="reply-form-{{ tweet.id }}" class="reply-form" style="display: none;">
+            <div id="reply-form-{{ tweet.id }}" class="reply-form is-hidden">
                 <form action="{{ url_for('reply_tweet', tweet_id=tweet.id) }}" method="POST" enctype="multipart/form-data">
+                    <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
                     <textarea name="content" placeholder="Reply to this tweet..." maxlength="280"></textarea>
                     <input type="file" id="reply-media-{{ tweet.id }}" name="media" class="media-input" accept="image/*,video/*">
                     <div class="reply-actions">
@@ -120,7 +125,7 @@
             <div class="replies">
                 {% for reply_id in tweet.replies[:3] %}
                 {% set reply = all_tweets.get(reply_id) %}
-                {% if reply %}
+                {% if reply and can_render_embedded_tweet(reply_id, viewer_id) %}
                 <div class="reply">
                     <div class="reply-header">
                         <a href="{{ url_for('profile', username=users.get(reply.user_id, {}).username) }}" class="user-link">
@@ -128,6 +133,12 @@
                             <span class="username">@{{ users.get(reply.user_id, {}).username }}</span>
                         </a>
                         <span class="timestamp">{{ reply.created_at[:16] }}</span>
+                        {% if reply.user_id == current_user.id or tweet.user_id == current_user.id or current_user.is_admin %}
+                        <form action="{{ url_for('delete_tweet', tweet_id=reply.id) }}" method="POST" class="delete-form">
+                            <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+                            <button type="submit" class="delete-btn" onclick="return confirm('Delete this reply?')">🗑️</button>
+                        </form>
+                        {% endif %}
                     </div>
                     <div class="reply-content">
                         {{ reply.parsed_content|safe }}

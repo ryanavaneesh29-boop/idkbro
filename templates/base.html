@@ -25,21 +25,25 @@
                 <a href="{{ url_for('who_to_follow') }}">Who to follow</a>
                 <a href="{{ url_for('drafts') }}">Drafts</a>
                 <a href="{{ url_for('profile', username=current_user.username) }}">Profile</a>
-                <a href="{{ url_for('toggle_theme') }}" class="theme-toggle">
-                    {% if session.get('theme', 'dark') == 'dark' %}☀️{% else %}🌙{% endif %}
-                </a>
-                <a href="{{ url_for('logout') }}">Logout (@{{ current_user.username }})</a>
+                <form action="{{ url_for('toggle_theme') }}" method="POST" class="nav-inline-form">
+                    <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+                    <button type="submit" class="theme-toggle">Theme</button>
+                </form>
+                <form action="{{ url_for('logout') }}" method="POST" class="nav-inline-form">
+                    <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+                    <button type="submit">Logout (@{{ current_user.username }})</button>
+                </form>
             {% else %}
                 <a href="{{ url_for('login') }}">Login</a>
                 <a href="{{ url_for('register') }}">Register</a>
             {% endif %}
         </div>
     </nav>
-    
+
     <main class="container">
         {% block content %}{% endblock %}
     </main>
-    
+
     <script src="{{ url_for('static', filename='script.js') }}"></script>
 </body>
 </html>
