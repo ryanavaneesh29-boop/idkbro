@@ -71,8 +71,8 @@
                     </div>
                     {% endif %}
                 </div>
-                <a href="{{ url_for('tweet_detail', tweet_id=tweet.id) }}" class="tweet-open-link">Open tweet</a>
                 <div class="tweet-stats">
+                    <a href="{{ url_for('tweet_detail', tweet_id=tweet.id) }}" class="thread-btn">View replies</a>
                     <form action="{{ url_for('like_tweet', tweet_id=tweet.id) }}" method="POST" class="like-form">
                         <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
                         <button type="submit" class="like-btn {% if tweet.is_liked %}liked{% endif %}">
