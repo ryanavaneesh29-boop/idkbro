@@ -578,6 +578,15 @@ def can_delete_tweet_id(tweet_id, user_id):
         (parent_tweet and parent_tweet.get('user_id') == user_id)
     ))
 
+def direct_reply_views(tweet, viewer_id):
+    replies = []
+    for reply_id in tweet.get('replies', []):
+        reply = tweets.get(reply_id)
+        if reply and can_view_tweet(reply, viewer_id):
+            replies.append(build_tweet_view(reply, viewer_id))
+    replies.sort(key=lambda item: item.get('created_at', ''))
+    return replies
+
 def tweet_for_media(filename):
     safe_name = secure_filename(filename)
     for tweet in tweets.values():
@@ -1082,6 +1091,25 @@ def quote_tweet(tweet_id):
 
     return render_template('quote.html', tweet=tweet, current_user=users.get(session['user_id']), users=users)
 
+@app.route('/tweet/<tweet_id>')
+@login_required
+def tweet_detail(tweet_id):
+    tweet = tweets.get(tweet_id)
+    if not tweet or not can_view_tweet(tweet, session['user_id']):
+        abort(404)
+
+    return render_template(
+        'tweet_detail.html',
+        tweet=build_tweet_view(tweet, session['user_id']),
+        replies=direct_reply_views(tweet, session['user_id']),
+        current_user=users.get(session['user_id']),
+        users=users,
+        all_tweets=tweets,
+        can_render_embedded_tweet=can_render_embedded_tweet,
+        can_delete_tweet_id=can_delete_tweet_id,
+        viewer_id=session['user_id']
+    )
+
 @app.route('/reply/<tweet_id>', methods=['POST'])
 @login_required
 def reply_tweet(tweet_id):
@@ -1425,9 +1453,14 @@ def pin_tweet(tweet_id):
 @app.route('/delete/<tweet_id>', methods=['POST'])
 @login_required
 def delete_tweet(tweet_id):
+    tweet = tweets.get(tweet_id)
+    parent_id = tweet.get('reply_to') if tweet else None
     if can_delete_tweet_id(tweet_id, session['user_id']):
         delete_tweet_tree(tweet_id)
         save_data(users, tweets, notifications, messages)
+        if parent_id and parent_id in tweets:
+            return redirect(url_for('tweet_detail', tweet_id=parent_id))
+        return redirect(url_for('index'))
     return redirect(safe_redirect_url())
 
 @app.route('/messages')

@@ -1,0 +1,129 @@
+{% extends "base.html" %}
+
+{% block title %}Tweet by {{ tweet.display_name }} - idkbro{% endblock %}
+
+{% block content %}
+<div class="home-container">
+    <div class="thread-view-header">
+        <a href="{{ request.referrer or url_for('index') }}" class="btn btn-secondary">Back</a>
+    </div>
+
+    <article class="tweet tweet-detail">
+        <div class="tweet-header">
+            <a href="{{ url_for('profile', username=tweet.username) }}" class="user-link">
+                <strong>{{ tweet.display_name }}</strong>
+                <span class="username">@{{ tweet.username }}</span>
+            </a>
+            <span class="timestamp">{{ tweet.created_at[:16] }}</span>
+        </div>
+        <div class="tweet-content">
+            {{ tweet.parsed_content|safe }}
+            {% if tweet.media %}
+            <div class="tweet-media">
+                {% if tweet.media.type == 'image' %}
+                <img src="{{ tweet.media.url }}" alt="Tweet image">
+                {% else %}
+                <video controls preload="metadata">
+                    <source src="{{ tweet.media.url }}">
+                </video>
+                {% endif %}
+            </div>
+            {% endif %}
+            {% if tweet.is_quote and tweet.quote_to %}
+            {% set quoted = all_tweets.get(tweet.quote_to) %}
+            {% if quoted and can_render_embedded_tweet(tweet.quote_to, viewer_id) %}
+            <div class="quoted-tweet">
+                <div><strong>{{ users.get(quoted.user_id, {}).display_name }}</strong> @{{ users.get(quoted.user_id, {}).username }}</div>
+                <div>{{ quoted.parsed_content|safe }}</div>
+            </div>
+            {% endif %}
+            {% endif %}
+        </div>
+        <div class="tweet-stats">
+            <form action="{{ url_for('like_tweet', tweet_id=tweet.id) }}" method="POST" class="like-form">
+                <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+                <button type="submit" class="like-btn {% if tweet.is_liked %}liked{% endif %}">
+                    {% if tweet.is_liked %}❤️{% else %}🤍{% endif %}
+                    <span>{{ tweet.like_count }}</span>
+                </button>
+            </form>
+            <form action="{{ url_for('retweet_tweet', tweet_id=tweet.id) }}" method="POST" class="retweet-form">
+                <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+                <button type="submit" class="retweet-btn {% if session['user_id'] in tweet.get('retweets', []) %}retweeted{% endif %}">
+                    🔄 <span>{{ tweet.retweet_count }}</span>
+                </button>
+            </form>
+            <button class="reply-btn" onclick="toggleReplyForm('{{ tweet.id }}')">💬</button>
+            <a href="{{ url_for('quote_tweet', tweet_id=tweet.id) }}" class="quote-btn">📝</a>
+            {% if can_delete_tweet_id(tweet.id, current_user.id) %}
+            <form action="{{ url_for('delete_tweet', tweet_id=tweet.id) }}" method="POST" class="delete-form">
+                <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+                <button type="submit" class="delete-btn" data-confirm-message="Delete this tweet?">🗑️</button>
+            </form>
+            {% endif %}
+        </div>
+
+        <div id="reply-form-{{ tweet.id }}" class="reply-form">
+            <form action="{{ url_for('reply_tweet', tweet_id=tweet.id) }}" method="POST" enctype="multipart/form-data">
+                <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+                <textarea name="content" placeholder="Reply to this tweet..." maxlength="280"></textarea>
+                <input type="file" id="detail-reply-media-{{ tweet.id }}" name="media" class="media-input" accept="image/*,video/*">
+                <div class="reply-actions">
+                    <span class="char-count">280</span>
+                    <div class="composer-actions">
+                        <label for="detail-reply-media-{{ tweet.id }}" class="media-picker" title="Add photo or video" aria-label="Add photo or video">
+                            <svg viewBox="0 0 24 24" aria-hidden="true">
+                                <rect x="3.5" y="4.5" width="17" height="15" rx="3" ry="3"/>
+                                <circle cx="8.2" cy="9" r="1.8"/>
+                                <path d="M5.5 16l4.2-4.2a1 1 0 0 1 1.4 0l2.2 2.2a1 1 0 0 0 1.4 0l1.7-1.7a1 1 0 0 1 1.4 0L20.5 15"/>
+                            </svg>
+                        </label>
+                        <button type="submit" class="btn btn-primary">Reply</button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </article>
+
+    <section class="replies thread-replies">
+        <h2>Replies</h2>
+        {% for reply in replies %}
+        <article class="reply">
+            <div class="reply-header">
+                <a href="{{ url_for('profile', username=reply.username) }}" class="user-link">
+                    <strong>{{ reply.display_name }}</strong>
+                    <span class="username">@{{ reply.username }}</span>
+                </a>
+                <span class="timestamp">{{ reply.created_at[:16] }}</span>
+                {% if can_delete_tweet_id(reply.id, current_user.id) %}
+                <form action="{{ url_for('delete_tweet', tweet_id=reply.id) }}" method="POST" class="delete-form">
+                    <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+                    <button type="submit" class="delete-btn" data-confirm-message="Delete this reply?">🗑️</button>
+                </form>
+                {% endif %}
+            </div>
+            <a href="{{ url_for('tweet_detail', tweet_id=reply.id) }}" class="reply-content-link">
+                <div class="reply-content">
+                    {{ reply.parsed_content|safe }}
+                    {% if reply.media %}
+                    <div class="tweet-media">
+                        {% if reply.media.type == 'image' %}
+                        <img src="{{ reply.media.url }}" alt="Reply image">
+                        {% else %}
+                        <video controls preload="metadata">
+                            <source src="{{ reply.media.url }}">
+                        </video>
+                        {% endif %}
+                    </div>
+                    {% endif %}
+                </div>
+            </a>
+        </article>
+        {% else %}
+        <div class="empty-state">
+            <p>No replies yet.</p>
+        </div>
+        {% endfor %}
+    </section>
+</div>
+{% endblock %}

@@ -30,7 +30,7 @@
     <!-- Tweets Feed -->
     <div class="tweets-feed">
         {% for tweet in tweets %}
-        <div class="tweet">
+        <div class="tweet" data-tweet-url="{{ url_for('tweet_detail', tweet_id=tweet.id) }}">
             <div class="tweet-header">
                 <a href="{{ url_for('profile', username=tweet.username) }}" class="user-link">
                     <strong>{{ tweet.display_name }}</strong>
@@ -159,7 +159,7 @@
                 {% endfor %}
                 {% if tweet.replies|length > 3 %}
                 <div class="show-more-replies">
-                    <a href="#">{{ tweet.replies|length - 3 }} more replies</a>
+                    <a href="{{ url_for('tweet_detail', tweet_id=tweet.id) }}">{{ tweet.replies|length - 3 }} more replies</a>
                 </div>
                 {% endif %}
             </div>

@@ -370,6 +370,22 @@ body {
     color: #ff4444;
 }
 
+.tweet[data-tweet-url] {
+    cursor: pointer;
+}
+
+.tweet[data-tweet-url]:hover {
+    border-color: #4b5563;
+}
+
+.tweet-detail {
+    cursor: default;
+}
+
+.thread-view-header {
+    margin-bottom: 1rem;
+}
+
 .btn-danger {
     background-color: #dc2626;
     color: #fff;
@@ -755,6 +771,16 @@ body {
 .reply-content {
     font-size: 0.95rem;
     line-height: 1.4;
+}
+
+.reply-content-link {
+    color: inherit;
+    text-decoration: none;
+}
+
+.thread-replies h2 {
+    font-size: 1.1rem;
+    margin: 1.25rem 0 0.75rem;
 }
 
 .show-more-replies {
