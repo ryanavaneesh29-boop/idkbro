@@ -374,6 +374,24 @@ body {
     cursor: pointer;
 }
 
+.tweet-card-link {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    border-radius: inherit;
+}
+
+.tweet-header,
+.tweet-content,
+.tweet-stats,
+.tweet-media,
+.quoted-tweet,
+.reply-form,
+.replies {
+    position: relative;
+    z-index: 2;
+}
+
 .tweet[data-tweet-url]:hover {
     border-color: #4b5563;
 }

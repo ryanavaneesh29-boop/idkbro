@@ -45,6 +45,7 @@
     <div class="tweets-feed">
         {% for tweet in tweets %}
         <div class="tweet" data-tweet-url="{{ url_for('tweet_detail', tweet_id=tweet.id) }}">
+            <a href="{{ url_for('tweet_detail', tweet_id=tweet.id) }}" class="tweet-card-link" aria-label="Open tweet"></a>
             <div class="tweet-header">
                 <strong>{{ tweet.display_name }}</strong>
                 <span class="username">@{{ tweet.username }}</span>
