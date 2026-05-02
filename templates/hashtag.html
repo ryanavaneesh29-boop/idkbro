@@ -48,10 +48,10 @@
                     </button>
                 </form>
                 <button class="reply-btn" onclick="toggleReplyForm('{{ tweet.id }}')">💬</button>
-                {% if tweet.user_id == current_user.id or current_user.is_admin %}
+                {% if can_delete_tweet_id(tweet.id, current_user.id) %}
                 <form action="{{ url_for('delete_tweet', tweet_id=tweet.id) }}" method="POST" class="delete-form">
                     <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
-                    <button type="submit" class="delete-btn" onclick="return confirm('Delete this tweet?')">🗑️</button>
+                    <button type="submit" class="delete-btn" data-confirm-message="Delete this tweet?">🗑️</button>
                 </form>
                 {% endif %}
             </div>
@@ -92,10 +92,10 @@
                             <span class="username">@{{ users.get(reply.user_id, {}).username }}</span>
                         </a>
                         <span class="timestamp">{{ reply.created_at[:16] }}</span>
-                        {% if reply.user_id == current_user.id or tweet.user_id == current_user.id or current_user.is_admin %}
+                        {% if can_delete_tweet_id(reply.id, current_user.id) %}
                         <form action="{{ url_for('delete_tweet', tweet_id=reply.id) }}" method="POST" class="delete-form">
                             <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
-                            <button type="submit" class="delete-btn" onclick="return confirm('Delete this reply?')">🗑️</button>
+                            <button type="submit" class="delete-btn" data-confirm-message="Delete this reply?">🗑️</button>
                         </form>
                         {% endif %}
                     </div>

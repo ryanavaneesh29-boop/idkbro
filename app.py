@@ -568,6 +568,16 @@ def can_render_embedded_tweet(tweet_id, viewer_id):
     tweet = tweets.get(tweet_id)
     return bool(tweet and can_view_tweet(tweet, viewer_id))
 
+def can_delete_tweet_id(tweet_id, user_id):
+    tweet = tweets.get(tweet_id)
+    current_user = users.get(user_id, {})
+    parent_tweet = tweets.get(tweet.get('reply_to')) if tweet else None
+    return bool(tweet and (
+        tweet.get('user_id') == user_id or
+        current_user.get('is_admin', False) or
+        (parent_tweet and parent_tweet.get('user_id') == user_id)
+    ))
+
 def tweet_for_media(filename):
     safe_name = secure_filename(filename)
     for tweet in tweets.values():
@@ -746,6 +756,7 @@ def index():
                          users=users,
                          all_tweets=tweets,
                          can_render_embedded_tweet=can_render_embedded_tweet,
+                         can_delete_tweet_id=can_delete_tweet_id,
                          viewer_id=session['user_id'])
 
 @app.route('/media/<path:filename>')
@@ -988,6 +999,7 @@ def post_tweet():
                              users=users,
                              all_tweets=tweets,
                              can_render_embedded_tweet=can_render_embedded_tweet,
+                             can_delete_tweet_id=can_delete_tweet_id,
                              viewer_id=session['user_id'],
                              error=media_error)
 
@@ -1324,6 +1336,7 @@ def hashtag(hashtag):
                          users=users,
                          all_tweets=tweets,
                          can_render_embedded_tweet=can_render_embedded_tweet,
+                         can_delete_tweet_id=can_delete_tweet_id,
                          viewer_id=session['user_id'])
 
 @app.route('/search', methods=['GET', 'POST'])
@@ -1412,15 +1425,7 @@ def pin_tweet(tweet_id):
 @app.route('/delete/<tweet_id>', methods=['POST'])
 @login_required
 def delete_tweet(tweet_id):
-    tweet = tweets.get(tweet_id)
-    current_user = users.get(session['user_id'], {})
-    parent_tweet = tweets.get(tweet.get('reply_to')) if tweet else None
-    can_delete = tweet and (
-        tweet['user_id'] == session['user_id'] or
-        current_user.get('is_admin', False) or
-        (parent_tweet and parent_tweet.get('user_id') == session['user_id'])
-    )
-    if can_delete:
+    if can_delete_tweet_id(tweet_id, session['user_id']):
         delete_tweet_tree(tweet_id)
         save_data(users, tweets, notifications, messages)
     return redirect(safe_redirect_url())

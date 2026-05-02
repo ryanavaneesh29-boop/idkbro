@@ -72,6 +72,56 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
     }
+
+    const deleteModal = document.getElementById('delete-confirm-modal');
+    const deleteMessage = document.getElementById('delete-confirm-message');
+    const deleteSubmit = document.getElementById('delete-confirm-submit');
+    let pendingDeleteForm = null;
+
+    if (deleteModal && deleteMessage && deleteSubmit) {
+        const openDeleteModal = function(form, message) {
+            pendingDeleteForm = form;
+            deleteMessage.textContent = message || 'Are you sure you want to delete this?';
+            deleteModal.classList.remove('is-hidden');
+            deleteModal.setAttribute('aria-hidden', 'false');
+            deleteSubmit.focus();
+        };
+
+        const closeDeleteModal = function() {
+            pendingDeleteForm = null;
+            deleteModal.classList.add('is-hidden');
+            deleteModal.setAttribute('aria-hidden', 'true');
+        };
+
+        document.querySelectorAll('.delete-form').forEach(function(form) {
+            form.addEventListener('submit', function(event) {
+                const button = form.querySelector('.delete-btn');
+                if (!button || form.dataset.confirmed === 'true') {
+                    return;
+                }
+                event.preventDefault();
+                openDeleteModal(form, button.dataset.confirmMessage);
+            });
+        });
+
+        deleteSubmit.addEventListener('click', function() {
+            if (!pendingDeleteForm) {
+                return;
+            }
+            pendingDeleteForm.dataset.confirmed = 'true';
+            pendingDeleteForm.submit();
+        });
+
+        document.querySelectorAll('[data-confirm-cancel]').forEach(function(button) {
+            button.addEventListener('click', closeDeleteModal);
+        });
+
+        document.addEventListener('keydown', function(event) {
+            if (event.key === 'Escape' && deleteModal.getAttribute('aria-hidden') === 'false') {
+                closeDeleteModal();
+            }
+        });
+    }
 });
 
 // Toggle reply form
