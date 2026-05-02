@@ -36,9 +36,7 @@
                     <strong>{{ tweet.display_name }}</strong>
                     <span class="username">@{{ tweet.username }}</span>
                 </a>
-                <a href="{{ url_for('tweet_detail', tweet_id=tweet.id) }}" class="tweet-detail-link">
-                    <span class="timestamp">{{ tweet.created_at[:16] }}</span>
-                </a>
+                <span class="timestamp">{{ tweet.created_at[:16] }}</span>
             </div>
             <div class="tweet-content">
                 {{ tweet.parsed_content|safe }}
@@ -75,7 +73,6 @@
                 {% endif %}
             </div>
             <div class="tweet-stats">
-                <a href="{{ url_for('tweet_detail', tweet_id=tweet.id) }}" class="thread-btn">View replies</a>
                 <form action="{{ url_for('like_tweet', tweet_id=tweet.id) }}" method="POST" class="like-form">
                     <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
                     <button type="submit" class="like-btn {% if tweet.is_liked %}liked{% endif %}">

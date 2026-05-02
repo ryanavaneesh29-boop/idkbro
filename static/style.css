@@ -374,15 +374,6 @@ body {
     cursor: pointer;
 }
 
-.tweet-detail-link {
-    color: inherit;
-    text-decoration: none;
-}
-
-.tweet-detail-link:hover {
-    text-decoration: none;
-}
-
 .tweet[data-tweet-url]:hover {
     border-color: #4b5563;
 }
@@ -831,8 +822,7 @@ body {
     color: #17bf63;
 }
 
-.quote-btn,
-.thread-btn {
+.quote-btn {
     border: none;
     background: none;
     color: #8899a6;
@@ -843,8 +833,7 @@ body {
     font-size: 0.95rem;
 }
 
-.quote-btn:hover,
-.thread-btn:hover {
+.quote-btn:hover {
     background-color: rgba(29, 161, 242, 0.1);
     color: #1da1f2;
 }
