@@ -48,7 +48,6 @@
             <h3>Tweets</h3>
             {% for tweet in results.tweets %}
             <div class="tweet" data-tweet-url="{{ url_for('tweet_detail', tweet_id=tweet.id) }}">
-                <a href="{{ url_for('tweet_detail', tweet_id=tweet.id) }}" class="tweet-card-link" aria-label="Open tweet"></a>
                 <div class="tweet-header">
                     <a href="{{ url_for('profile', username=tweet.username) }}" class="user-link">
                         <strong>{{ tweet.display_name }}</strong>
