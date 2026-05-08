@@ -127,7 +127,76 @@ def init_rate_limit_db():
         )
         conn.execute('CREATE INDEX IF NOT EXISTS idx_attempts_key_time ON attempts (key, timestamp)')
 
+def init_app_db():
+    with sqlite3.connect(APP_DB) as conn:
+        # Sessions table for persistent session management
+        conn.execute('''
+            CREATE TABLE IF NOT EXISTS sessions (
+                session_id TEXT PRIMARY KEY,
+                data TEXT NOT NULL,
+                expires_at REAL NOT NULL
+            )
+        ''')
+        conn.execute('CREATE INDEX IF NOT EXISTS idx_sessions_expires ON sessions (expires_at)')
+
+        # Logs table for logging and analytics
+        conn.execute('''
+            CREATE TABLE IF NOT EXISTS logs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                timestamp REAL NOT NULL,
+                level TEXT NOT NULL,
+                message TEXT NOT NULL,
+                user_id TEXT,
+                ip TEXT,
+                path TEXT
+            )
+        ''')
+        conn.execute('CREATE INDEX IF NOT EXISTS idx_logs_timestamp ON logs (timestamp)')
+        conn.execute('CREATE INDEX IF NOT EXISTS idx_logs_user ON logs (user_id)')
+
+        # Config table for configuration and settings
+        conn.execute('''
+            CREATE TABLE IF NOT EXISTS config (
+                key TEXT PRIMARY KEY,
+                value TEXT NOT NULL,
+                updated_at REAL NOT NULL
+            )
+        ''')
+
+        # Jobs table for queue system
+        conn.execute('''
+            CREATE TABLE IF NOT EXISTS jobs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                type TEXT NOT NULL,
+                data TEXT NOT NULL,
+                status TEXT NOT NULL DEFAULT 'pending',
+                created_at REAL NOT NULL,
+                updated_at REAL NOT NULL,
+                priority INTEGER DEFAULT 0
+            )
+        ''')
+        conn.execute('CREATE INDEX IF NOT EXISTS idx_jobs_status ON jobs (status)')
+        conn.execute('CREATE INDEX IF NOT EXISTS idx_jobs_type ON jobs (type)')
+
+        # Cache table for caching and temporary data
+        conn.execute('''
+            CREATE TABLE IF NOT EXISTS cache (
+                key TEXT PRIMARY KEY,
+                value TEXT NOT NULL,
+                expires_at REAL NOT NULL
+            )
+        ''')
+        conn.execute('CREATE INDEX IF NOT EXISTS idx_cache_expires ON cache (expires_at)')
+
+        # FTS table for full-text search on tweets
+        conn.execute('''
+            CREATE VIRTUAL TABLE IF NOT EXISTS fts_tweets USING fts5(
+                id, content, user_id, created_at
+            )
+        ''')
+
 init_rate_limit_db()
+init_app_db()
 
 def load_data():
     users = {}
@@ -170,7 +239,152 @@ def save_data(users, tweets, notifications=None, messages=None):
             if messages is not None:
                 atomic_write_json(MESSAGES_FILE, messages)
 
+# SQLite-based features
+
+# Session Management
+def save_session(session_id, data, expires_at):
+    with sqlite3.connect(APP_DB) as conn:
+        conn.execute(
+            'INSERT OR REPLACE INTO sessions (session_id, data, expires_at) VALUES (?, ?, ?)',
+            (session_id, json.dumps(data), expires_at)
+        )
+
+def load_session(session_id):
+    with sqlite3.connect(APP_DB) as conn:
+        row = conn.execute(
+            'SELECT data FROM sessions WHERE session_id = ? AND expires_at > ?',
+            (session_id, time.time())
+        ).fetchone()
+        if row:
+            return json.loads(row[0])
+    return None
+
+def cleanup_sessions():
+    with sqlite3.connect(APP_DB) as conn:
+        conn.execute('DELETE FROM sessions WHERE expires_at <= ?', (time.time(),))
+
+# Logging and Analytics
+def log_event(level, message, user_id=None, ip=None, path=None):
+    with sqlite3.connect(APP_DB) as conn:
+        conn.execute(
+            'INSERT INTO logs (timestamp, level, message, user_id, ip, path) VALUES (?, ?, ?, ?, ?, ?)',
+            (time.time(), level, message, user_id, ip, path)
+        )
+
+def get_logs(limit=100, user_id=None, level=None):
+    with sqlite3.connect(APP_DB) as conn:
+        query = 'SELECT * FROM logs WHERE 1=1'
+        params = []
+        if user_id:
+            query += ' AND user_id = ?'
+            params.append(user_id)
+        if level:
+            query += ' AND level = ?'
+            params.append(level)
+        query += ' ORDER BY timestamp DESC LIMIT ?'
+        params.append(limit)
+        return conn.execute(query, params).fetchall()
+
+# Configuration and Settings
+def set_config(key, value):
+    with sqlite3.connect(APP_DB) as conn:
+        conn.execute(
+            'INSERT OR REPLACE INTO config (key, value, updated_at) VALUES (?, ?, ?)',
+            (key, value, time.time())
+        )
+
+def get_config(key, default=None):
+    with sqlite3.connect(APP_DB) as conn:
+        row = conn.execute('SELECT value FROM config WHERE key = ?', (key,)).fetchone()
+        return row[0] if row else default
+
+# Queue System
+def enqueue_job(job_type, data, priority=0):
+    with sqlite3.connect(APP_DB) as conn:
+        now = time.time()
+        conn.execute(
+            'INSERT INTO jobs (type, data, created_at, updated_at, priority) VALUES (?, ?, ?, ?, ?)',
+            (job_type, json.dumps(data), now, now, priority)
+        )
+
+def dequeue_job(job_type=None):
+    with sqlite3.connect(APP_DB) as conn:
+        query = 'SELECT id, type, data FROM jobs WHERE status = ?'
+        params = ['pending']
+        if job_type:
+            query += ' AND type = ?'
+            params.append(job_type)
+        query += ' ORDER BY priority DESC, created_at ASC LIMIT 1'
+        row = conn.execute(query, params).fetchone()
+        if row:
+            job_id, jtype, data = row
+            conn.execute('UPDATE jobs SET status = ?, updated_at = ? WHERE id = ?', ('processing', time.time(), job_id))
+            return job_id, jtype, json.loads(data)
+    return None
+
+def complete_job(job_id):
+    with sqlite3.connect(APP_DB) as conn:
+        conn.execute('UPDATE jobs SET status = ?, updated_at = ? WHERE id = ?', ('completed', time.time(), job_id))
+
+def fail_job(job_id):
+    with sqlite3.connect(APP_DB) as conn:
+        conn.execute('UPDATE jobs SET status = ?, updated_at = ? WHERE id = ?', ('failed', time.time(), job_id))
+
+# Caching and Temporary Data
+def set_cache(key, value, ttl_seconds=3600):
+    expires_at = time.time() + ttl_seconds
+    with sqlite3.connect(APP_DB) as conn:
+        conn.execute(
+            'INSERT OR REPLACE INTO cache (key, value, expires_at) VALUES (?, ?, ?)',
+            (key, json.dumps(value), expires_at)
+        )
+
+def get_cache(key):
+    with sqlite3.connect(APP_DB) as conn:
+        row = conn.execute(
+            'SELECT value FROM cache WHERE key = ? AND expires_at > ?',
+            (key, time.time())
+        ).fetchone()
+        if row:
+            return json.loads(row[0])
+    return None
+
+def cleanup_cache():
+    with sqlite3.connect(APP_DB) as conn:
+        conn.execute('DELETE FROM cache WHERE expires_at <= ?', (time.time(),))
+
+# Full-Text Search
+def populate_fts_tweets():
+    users, tweets, _, _ = load_data()
+    with sqlite3.connect(APP_DB) as conn:
+        conn.execute('DELETE FROM fts_tweets')
+        for tweet_id, tweet in tweets.items():
+            conn.execute(
+                'INSERT INTO fts_tweets (id, content, user_id, created_at) VALUES (?, ?, ?, ?)',
+                (tweet_id, tweet['content'], tweet['user_id'], tweet['created_at'])
+            )
+
+def search_tweets(query, limit=50):
+    with sqlite3.connect(APP_DB) as conn:
+        rows = conn.execute(
+            'SELECT id FROM fts_tweets WHERE fts_tweets MATCH ? ORDER BY rank LIMIT ?',
+            (query, limit)
+        ).fetchall()
+        return [row[0] for row in rows]
+
+def update_fts_tweet(tweet_id, content, user_id, created_at):
+    with sqlite3.connect(APP_DB) as conn:
+        conn.execute(
+            'INSERT OR REPLACE INTO fts_tweets (id, content, user_id, created_at) VALUES (?, ?, ?, ?)',
+            (tweet_id, content, user_id, created_at)
+        )
+
+def delete_fts_tweet(tweet_id):
+    with sqlite3.connect(APP_DB) as conn:
+        conn.execute('DELETE FROM fts_tweets WHERE id = ?', (tweet_id,))
+
 def hash_password(password):
+    return generate_password_hash(password)
     return generate_password_hash(password)
 
 def legacy_sha256_password(password):
@@ -359,7 +573,7 @@ def ensure_admin_account():
         'is_admin': True
     })
     return True
-
+#admin acccoount 
 def neutralize_unsafe_default_admin():
     changed = False
     for user in users.values():
@@ -493,7 +707,7 @@ def image_upload_is_parseable(file_storage):
         return True
     except (OSError, UnidentifiedImageError):
         return False
-
+#image types 
 def save_image_without_metadata(file_storage, destination, extension):
     if Image is None:
         file_storage.save(destination)
@@ -644,6 +858,8 @@ def delete_tweet_tree(tweet_id):
             parent_replies.remove(tweet_id)
 
     del tweets[tweet_id]
+    delete_fts_tweet(tweet_id)
+    log_event('info', f'Tweet {tweet_id} deleted', user_id=tweet.get('user_id'))
 
 def build_user_list_entry(user_id, viewer_id):
     user = users.get(user_id)
@@ -703,10 +919,15 @@ def login_required(f):
             return redirect(url_for('login'))
         return f(*args, **kwargs)
     return decorated_function
+
+def admin_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
         if 'user_id' not in session:
             return redirect(url_for('login'))
+        user = users.get(session['user_id'])
+        if not user or not user.get('is_admin', False):
+            abort(403)
         return f(*args, **kwargs)
     return decorated_function
 
@@ -733,6 +954,9 @@ admin_changed = ensure_admin_account()
 if unsafe_admin_changed or admin_changed:
     save_data(users, tweets, notifications, messages)
 
+# Populate FTS with existing tweets
+populate_fts_tweets()
+
 @app.route('/')
 def index():
     if 'user_id' not in session:
@@ -742,6 +966,10 @@ def index():
     if not current_user:
         session.clear()
         return redirect(url_for('login'))
+    
+    # Cleanup old data
+    cleanup_sessions()
+    cleanup_cache()
     
     # Get all tweets for the timeline
     timeline = []
@@ -1033,6 +1261,9 @@ def post_tweet():
         'media': media
     }
 
+    update_fts_tweet(tid, content, session['user_id'], tweets[tid]['created_at'])
+    log_event('info', f'User {session["user_id"]} posted tweet {tid}', user_id=session['user_id'], ip=request.remote_addr, path=request.path)
+
     # if quote, we can create reference link in template
     save_data(users, tweets, notifications, messages)
     return redirect(url_for('index'))
@@ -1085,6 +1316,8 @@ def quote_tweet(tweet_id):
             'thread_to': None,
             'media': media
         }
+        update_fts_tweet(qid, content, session['user_id'], tweets[qid]['created_at'])
+        log_event('info', f'User {session["user_id"]} quoted tweet {tweet_id} with {qid}', user_id=session['user_id'], ip=request.remote_addr, path=request.path)
         create_notification(tweet['user_id'], 'quote', session['user_id'], tweet_id)
         save_data(users, tweets, notifications, messages)
         return redirect(url_for('index'))
@@ -1140,6 +1373,9 @@ def reply_tweet(tweet_id):
         'reply_to': tweet_id,
         'media': media
     }
+    
+    update_fts_tweet(tid, content, session['user_id'], tweets[tid]['created_at'])
+    log_event('info', f'User {session["user_id"]} replied to tweet {tweet_id} with {tid}', user_id=session['user_id'], ip=request.remote_addr, path=request.path)
     
     # Add reply to original tweet's replies list
     if 'replies' not in original_tweet:
@@ -1376,13 +1612,11 @@ def search():
     search_results = {'tweets': [], 'users': []}
     
     if query:
-        # Search tweets
-        for tid, tweet in tweets.items():
-            if not is_visible_timeline_tweet(tweet):
-                continue
-            if not can_view_tweet(tweet, session.get('user_id')):
-                continue
-            if query.lower() in tweet.get('content', '').lower():
+        # Search tweets using FTS
+        tweet_ids = search_tweets(query)
+        for tid in tweet_ids:
+            tweet = tweets.get(tid)
+            if tweet and is_visible_timeline_tweet(tweet) and can_view_tweet(tweet, session.get('user_id')):
                 search_results['tweets'].append(build_tweet_view(tweet, session.get('user_id')))
         
         # Search users
@@ -1538,6 +1772,13 @@ def mark_message_read(message_id):
     if other_user.get('username'):
         return redirect(url_for('message_thread', username=other_user['username']))
     return redirect(url_for('messages_page'))
+
+@app.route('/admin/logs')
+@admin_required
+def admin_logs():
+    logs = get_logs(limit=100)
+    current_user = users.get(session['user_id'])
+    return render_template('admin_logs.html', logs=logs, current_user=current_user)
 
 if __name__ == '__main__':
     port = int(os.getenv("PORT", 5000))
