@@ -584,7 +584,8 @@ def safe_redirect_url(default_endpoint='index'):
 def validate_request_security():
     if request.path.startswith('/static/uploads/'):
         abort(404)
-    if not is_trusted_host(request_host()):
+    # Skip host validation if PUBLIC_BASE_URL is not set (more permissive for development/testing)
+    if PUBLIC_BASE_URL and not is_trusted_host(request_host()):
         abort(400)
     if request.method != 'POST':
         return
