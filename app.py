@@ -138,7 +138,7 @@ ALLOWED_MEDIA_MIME_TYPES = {
     'image/png', 'image/jpeg', 'image/gif', 'image/webp',
     'video/mp4', 'video/quicktime', 'video/webm', 'video/x-m4v'
 }
-DATA_LOCK = threading.Lock()
+DATA_LOCK = None  # Disable threading locks for WSGI compatibility
 RESET_REQUEST_MESSAGE = 'If an account exists for that email, we emailed a password reset link.'
 PUBLIC_BASE_URL = os.getenv('PUBLIC_BASE_URL', '').rstrip('/')
 TRUSTED_HOSTS = {
@@ -279,7 +279,22 @@ def load_data():
     tweets = {}
     notifications = {}
     messages = {}
-    with DATA_LOCK:
+    if DATA_LOCK:
+        with DATA_LOCK:
+            with DataFileLock():
+                if USERS_FILE.exists():
+                    with open(USERS_FILE, 'r') as f:
+                        users = json.load(f)
+                if TWEETS_FILE.exists():
+                    with open(TWEETS_FILE, 'r') as f:
+                        tweets = json.load(f)
+                if NOTIFICATIONS_FILE.exists():
+                    with open(NOTIFICATIONS_FILE, 'r') as f:
+                        notifications = json.load(f)
+                if MESSAGES_FILE.exists():
+                    with open(MESSAGES_FILE, 'r') as f:
+                        messages = json.load(f)
+    else:
         with DataFileLock():
             if USERS_FILE.exists():
                 with open(USERS_FILE, 'r') as f:
@@ -306,7 +321,16 @@ def atomic_write_json(path, payload):
     os.replace(temp_path, path)
 
 def save_data(users, tweets, notifications=None, messages=None):
-    with DATA_LOCK:
+    if DATA_LOCK:
+        with DATA_LOCK:
+            with DataFileLock():
+                atomic_write_json(USERS_FILE, users)
+                atomic_write_json(TWEETS_FILE, tweets)
+                if notifications is not None:
+                    atomic_write_json(NOTIFICATIONS_FILE, notifications)
+                if messages is not None:
+                    atomic_write_json(MESSAGES_FILE, messages)
+    else:
         with DataFileLock():
             atomic_write_json(USERS_FILE, users)
             atomic_write_json(TWEETS_FILE, tweets)
@@ -1038,16 +1062,26 @@ def create_notification(user_id, notification_type, from_user_id, tweet_id=None)
     save_data(users, tweets, notifications, messages)
 
 # Load data at startup
-users, tweets, notifications, messages = load_data()
-users = {uid: normalize_user_record(uid, user) for uid, user in users.items()}
-tweets = {tid: normalize_tweet_record(tid, tweet) for tid, tweet in tweets.items()}
-unsafe_admin_changed = neutralize_unsafe_default_admin()
-admin_changed = ensure_admin_account()
-if unsafe_admin_changed or admin_changed:
-    save_data(users, tweets, notifications, messages)
+try:
+    users, tweets, notifications, messages = load_data()
+    users = {uid: normalize_user_record(uid, user) for uid, user in users.items()}
+    tweets = {tid: normalize_tweet_record(tid, tweet) for tid, tweet in tweets.items()}
+    unsafe_admin_changed = neutralize_unsafe_default_admin()
+    admin_changed = ensure_admin_account()
+    if unsafe_admin_changed or admin_changed:
+        save_data(users, tweets, notifications, messages)
+except Exception as e:
+    print(f"WARNING: Failed to load data at startup: {e}")
+    users = {}
+    tweets = {}
+    notifications = {}
+    messages = {}
 
 # Populate FTS with existing tweets
-populate_fts_tweets()
+try:
+    populate_fts_tweets()
+except Exception as e:
+    print(f"WARNING: Failed to populate FTS: {e}")
 
 @app.route('/')
 def index():
