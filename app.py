@@ -188,12 +188,16 @@ def init_app_db():
         ''')
         conn.execute('CREATE INDEX IF NOT EXISTS idx_cache_expires ON cache (expires_at)')
 
-        # FTS table for full-text search on tweets
-        conn.execute('''
-            CREATE VIRTUAL TABLE IF NOT EXISTS fts_tweets USING fts5(
-                id, content, user_id, created_at
-            )
-        ''')
+        # FTS table for full-text search on tweets (optional)
+        try:
+            conn.execute('''
+                CREATE VIRTUAL TABLE IF NOT EXISTS fts_tweets USING fts5(
+                    id, content, user_id, created_at
+                )
+            ''')
+        except sqlite3.OperationalError:
+            # FTS5 not available, search will be disabled
+            pass
 
 init_rate_limit_db()
 init_app_db()
@@ -355,33 +359,49 @@ def cleanup_cache():
 
 # Full-Text Search
 def populate_fts_tweets():
-    users, tweets, _, _ = load_data()
-    with sqlite3.connect(APP_DB) as conn:
-        conn.execute('DELETE FROM fts_tweets')
-        for tweet_id, tweet in tweets.items():
-            conn.execute(
-                'INSERT INTO fts_tweets (id, content, user_id, created_at) VALUES (?, ?, ?, ?)',
-                (tweet_id, tweet['content'], tweet['user_id'], tweet['created_at'])
-            )
+    try:
+        users, tweets, _, _ = load_data()
+        with sqlite3.connect(APP_DB) as conn:
+            conn.execute('DELETE FROM fts_tweets')
+            for tweet_id, tweet in tweets.items():
+                conn.execute(
+                    'INSERT INTO fts_tweets (id, content, user_id, created_at) VALUES (?, ?, ?, ?)',
+                    (tweet_id, tweet['content'], tweet['user_id'], tweet['created_at'])
+                )
+    except sqlite3.OperationalError:
+        # FTS not available
+        pass
 
 def search_tweets(query, limit=50):
-    with sqlite3.connect(APP_DB) as conn:
-        rows = conn.execute(
-            'SELECT id FROM fts_tweets WHERE fts_tweets MATCH ? ORDER BY rank LIMIT ?',
-            (query, limit)
-        ).fetchall()
-        return [row[0] for row in rows]
+    try:
+        with sqlite3.connect(APP_DB) as conn:
+            rows = conn.execute(
+                'SELECT id FROM fts_tweets WHERE fts_tweets MATCH ? ORDER BY rank LIMIT ?',
+                (query, limit)
+            ).fetchall()
+            return [row[0] for row in rows]
+    except sqlite3.OperationalError:
+        # FTS not available, return empty results
+        return []
 
 def update_fts_tweet(tweet_id, content, user_id, created_at):
-    with sqlite3.connect(APP_DB) as conn:
-        conn.execute(
-            'INSERT OR REPLACE INTO fts_tweets (id, content, user_id, created_at) VALUES (?, ?, ?, ?)',
-            (tweet_id, content, user_id, created_at)
-        )
+    try:
+        with sqlite3.connect(APP_DB) as conn:
+            conn.execute(
+                'INSERT OR REPLACE INTO fts_tweets (id, content, user_id, created_at) VALUES (?, ?, ?, ?)',
+                (tweet_id, content, user_id, created_at)
+            )
+    except sqlite3.OperationalError:
+        # FTS not available
+        pass
 
 def delete_fts_tweet(tweet_id):
-    with sqlite3.connect(APP_DB) as conn:
-        conn.execute('DELETE FROM fts_tweets WHERE id = ?', (tweet_id,))
+    try:
+        with sqlite3.connect(APP_DB) as conn:
+            conn.execute('DELETE FROM fts_tweets WHERE id = ?', (tweet_id,))
+    except sqlite3.OperationalError:
+        # FTS not available
+        pass
 
 def hash_password(password):
     return generate_password_hash(password)
