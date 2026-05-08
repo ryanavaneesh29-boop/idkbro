@@ -44,7 +44,7 @@ from flask.sessions import SessionInterface, SessionMixin
 
 class SqliteSession(CallbackDict, SessionMixin):
     def __init__(self, initial=None, sid=None, new=False):
-        def on_update(self):
+        def on_update():
             self.modified = True
         CallbackDict.__init__(self, initial, on_update)
         self.sid = sid
@@ -70,8 +70,8 @@ class SqliteSessionInterface(SessionInterface):
 
     def save_session(self, app, session, response):
         domain = self.get_cookie_domain(app)
-        if not session:
-            if session.sid:
+        if not session or not hasattr(session, 'sid') or not session.sid:
+            if hasattr(session, 'sid') and session.sid:
                 response.delete_cookie(app.session_cookie_name, domain=domain)
             return
         if session.modified:
