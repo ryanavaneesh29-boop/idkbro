@@ -39,13 +39,51 @@ if os.getenv('TRUST_PROXY', '').lower() in {'1', 'true', 'yes'}:
         x_port=int(os.getenv('PROXY_FIX_X_PORT', '1')),
         x_prefix=int(os.getenv('PROXY_FIX_X_PREFIX', '0'))
     )
-app.config.update(
-    MAX_CONTENT_LENGTH=16 * 1024 * 1024,
-    SESSION_COOKIE_HTTPONLY=True,
-    SESSION_COOKIE_SAMESITE='Lax',
-    SESSION_COOKIE_SECURE=os.getenv('SESSION_COOKIE_SECURE', 'true').lower() in {'1', 'true', 'yes'},
-    PERMANENT_SESSION_LIFETIME=timedelta(days=14)
-)
+from werkzeug.datastructures import CallbackDict
+from flask.sessions import SessionInterface, SessionMixin
+
+class SqliteSession(CallbackDict, SessionMixin):
+    def __init__(self, initial=None, sid=None, new=False):
+        def on_update(self):
+            self.modified = True
+        CallbackDict.__init__(self, initial, on_update)
+        self.sid = sid
+        self.new = new
+        self.modified = False
+
+class SqliteSessionInterface(SessionInterface):
+    def __init__(self):
+        pass
+
+    def get_expires(self, days=14):
+        return time.time() + (days * 24 * 60 * 60)
+
+    def open_session(self, app, request):
+        sid = request.cookies.get(app.session_cookie_name)
+        if not sid:
+            sid = secrets.token_urlsafe(32)
+            return SqliteSession(sid=sid, new=True)
+        data = load_session(sid)
+        if data is not None:
+            return SqliteSession(data, sid=sid)
+        return SqliteSession(sid=sid, new=True)
+
+    def save_session(self, app, session, response):
+        domain = self.get_cookie_domain(app)
+        if not session:
+            if session.sid:
+                response.delete_cookie(app.session_cookie_name, domain=domain)
+            return
+        if session.modified:
+            expires = self.get_expires()
+            save_session(session.sid, dict(session), expires)
+        response.set_cookie(app.session_cookie_name, session.sid,
+                           expires=self.get_expiration_time(app, session),
+                           httponly=app.config['SESSION_COOKIE_HTTPONLY'],
+                           domain=domain, secure=app.config['SESSION_COOKIE_SECURE'],
+                           samesite=app.config['SESSION_COOKIE_SAMESITE'])
+
+app.session_interface = SqliteSessionInterface()
 
 # Data storage
 BASE_DIR = Path(__file__).resolve().parent
