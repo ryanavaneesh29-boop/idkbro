@@ -70,7 +70,8 @@ class SqliteSessionInterface(SessionInterface):
 
     def open_session(self, app, request):
         try:
-            sid = request.cookies.get(app.session_cookie_name)
+            cookie_name = app.config.get('SESSION_COOKIE_NAME', 'session')
+            sid = request.cookies.get(cookie_name)
             if not sid:
                 sid = secrets.token_urlsafe(32)
                 return SqliteSession(sid=sid, new=True)
@@ -85,15 +86,16 @@ class SqliteSessionInterface(SessionInterface):
 
     def save_session(self, app, session, response):
         try:
+            cookie_name = app.config.get('SESSION_COOKIE_NAME', 'session')
             domain = self.get_cookie_domain(app)
             if not session or not hasattr(session, 'sid') or not session.sid:
                 if hasattr(session, 'sid') and session.sid:
-                    response.delete_cookie(app.session_cookie_name, domain=domain)
+                    response.delete_cookie(cookie_name, domain=domain)
                 return
             if session.modified:
                 expires = self.get_expires()
                 save_session(session.sid, dict(session), expires)
-            response.set_cookie(app.session_cookie_name, session.sid,
+            response.set_cookie(cookie_name, session.sid,
                                expires=self.get_expiration_time(app, session),
                                httponly=app.config['SESSION_COOKIE_HTTPONLY'],
                                domain=domain, secure=app.config['SESSION_COOKIE_SECURE'],
@@ -101,13 +103,15 @@ class SqliteSessionInterface(SessionInterface):
         except Exception as e:
             # Fallback: just set a basic cookie if database fails
             if hasattr(session, 'sid') and session.sid:
-                response.set_cookie(app.session_cookie_name, session.sid,
+                cookie_name = app.config.get('SESSION_COOKIE_NAME', 'session')
+                response.set_cookie(cookie_name, session.sid,
                                    httponly=True, secure=False, samesite='Lax')
 
 app.session_interface = SqliteSessionInterface()
 
 app.config.update(
     MAX_CONTENT_LENGTH=16 * 1024 * 1024,
+    SESSION_COOKIE_NAME='session',
     SESSION_COOKIE_HTTPONLY=True,
     SESSION_COOKIE_SAMESITE='Lax',
     SESSION_COOKIE_SECURE=os.getenv('SESSION_COOKIE_SECURE', 'true').lower() in {'1', 'true', 'yes'},
