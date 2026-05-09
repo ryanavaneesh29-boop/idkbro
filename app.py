@@ -35,8 +35,7 @@ if IS_PRODUCTION:
         # Try alternative environment variable names
         secret_key = os.getenv('SECRET_KEY') or os.getenv('APP_SECRET_KEY')
     if not secret_key:
-        print("WARNING: FLASK_SECRET_KEY not set in production, using random key (not recommended for production)")
-        secret_key = secrets.token_hex(54)
+        raise RuntimeError('FLASK_SECRET_KEY must be set in production.')
     app.secret_key = secret_key
 else:
     app.secret_key = os.getenv('FLASK_SECRET_KEY') or secrets.token_hex(54)
@@ -90,6 +89,7 @@ class SqliteSessionInterface(SessionInterface):
             domain = self.get_cookie_domain(app)
             if not session or not hasattr(session, 'sid') or not session.sid:
                 if hasattr(session, 'sid') and session.sid:
+                    delete_session(session.sid)
                     response.delete_cookie(cookie_name, domain=domain)
                 return
             if session.modified:
@@ -105,7 +105,9 @@ class SqliteSessionInterface(SessionInterface):
             if hasattr(session, 'sid') and session.sid:
                 cookie_name = app.config.get('SESSION_COOKIE_NAME', 'session')
                 response.set_cookie(cookie_name, session.sid,
-                                   httponly=True, secure=False, samesite='Lax')
+                                   httponly=True,
+                                   secure=app.config['SESSION_COOKIE_SECURE'],
+                                   samesite=app.config['SESSION_COOKIE_SAMESITE'])
 
 app.session_interface = SqliteSessionInterface()
 
@@ -396,6 +398,10 @@ def save_session(session_id, data, expires_at):
             (session_id, json.dumps(data), expires_at)
         )
 
+def delete_session(session_id):
+    with sqlite3.connect(APP_DB) as conn:
+        conn.execute('DELETE FROM sessions WHERE session_id = ?', (session_id,))
+
 def load_session(session_id):
     with sqlite3.connect(APP_DB) as conn:
         row = conn.execute(
@@ -409,6 +415,15 @@ def load_session(session_id):
 def cleanup_sessions():
     with sqlite3.connect(APP_DB) as conn:
         conn.execute('DELETE FROM sessions WHERE expires_at <= ?', (time.time(),))
+
+def rotate_session():
+    old_sid = getattr(session, 'sid', None)
+    session.clear()
+    if old_sid:
+        delete_session(old_sid)
+    if hasattr(session, 'sid'):
+        session.sid = secrets.token_urlsafe(32)
+    session.modified = True
 
 # Logging and Analytics
 def log_event(level, message, user_id=None, ip=None, path=None):
@@ -650,6 +665,7 @@ def add_security_headers(response):
         "font-src 'self' https://fonts.gstatic.com; "
         f"img-src 'self' data: {media_csp_source}; "
         f"media-src 'self' {media_csp_source}; "
+        "form-action 'self'; "
         "object-src 'none'; "
         "base-uri 'self'; "
         "frame-ancestors 'none'"
@@ -759,7 +775,7 @@ def find_user_by_reset_token(token):
     token_hash = hash_reset_token(token)
     for uid, user in users.items():
         stored_token = user.get('reset_token')
-        if stored_token not in {token, token_hash}:
+        if not stored_token or not secrets.compare_digest(stored_token, token_hash):
             continue
         expires_at = parse_iso_datetime(user.get('reset_token_expires_at'))
         if not expires_at or expires_at < datetime.utcnow():
@@ -832,6 +848,15 @@ def parse_tweet_content(content):
 
 def media_url(filename):
     return f"/media/{filename}"
+
+def is_safe_media_filename(filename):
+    safe_name = secure_filename(filename or '')
+    return bool(
+        safe_name and
+        safe_name == filename and
+        '/' not in safe_name and
+        '\\' not in safe_name
+    )
 
 def normalize_media(media):
     if not media:
@@ -916,6 +941,8 @@ def save_uploaded_media(file_storage):
         return None, 'The uploaded image could not be processed safely'
 
     filename = secure_filename(file_storage.filename)
+    if not filename:
+        return None, 'That filename is not supported'
     unique_name = f"{uuid.uuid4().hex}_{filename}"
     destination = UPLOAD_DIR / unique_name
     if media_type == 'image':
@@ -969,7 +996,9 @@ def direct_reply_views(tweet, viewer_id):
     return replies
 
 def tweet_for_media(filename):
-    safe_name = secure_filename(filename)
+    if not is_safe_media_filename(filename):
+        return None
+    safe_name = filename
     for tweet in tweets.values():
         media = normalize_media(tweet.get('media'))
         if media and media.get('filename') == safe_name:
@@ -1175,9 +1204,9 @@ def index():
 
 @app.route('/media/<path:filename>')
 def media_file(filename):
-    safe_name = secure_filename(filename)
-    if safe_name != filename:
+    if not is_safe_media_filename(filename):
         abort(404)
+    safe_name = filename
     media_path = UPLOAD_DIR / safe_name
     if not media_path.exists():
         abort(404)
@@ -1211,11 +1240,11 @@ def login():
                 user['reset_token'] = None
                 user['reset_token_expires_at'] = None
                 save_data(users, tweets, notifications, messages)
-                session.clear()
+                rotate_session()
                 session['user_id'] = uid
                 return redirect(url_for('index'))
             if verify_password(user.get('password_hash'), password):
-                session.clear()
+                rotate_session()
                 session['user_id'] = uid
                 return redirect(url_for('index'))
 
@@ -1273,6 +1302,7 @@ def register():
             'created_at': datetime.now().isoformat()
         }
         save_data(users, tweets, notifications, messages)
+        rotate_session()
         session['user_id'] = uid
         return redirect(url_for('index'))
 
@@ -1341,7 +1371,10 @@ def reset_password(token):
 
 @app.route('/logout', methods=['POST'])
 def logout():
+    old_sid = getattr(session, 'sid', None)
     session.clear()
+    if old_sid:
+        delete_session(old_sid)
     return redirect(url_for('login'))
 
 @app.route('/drafts', methods=['GET','POST'])
@@ -1523,7 +1556,8 @@ def tweet_detail(tweet_id):
         all_tweets=tweets,
         can_render_embedded_tweet=can_render_embedded_tweet,
         can_delete_tweet_id=can_delete_tweet_id,
-        viewer_id=session['user_id']
+        viewer_id=session['user_id'],
+        back_url=safe_redirect_url()
     )
 
 @app.route('/reply/<tweet_id>', methods=['POST'])

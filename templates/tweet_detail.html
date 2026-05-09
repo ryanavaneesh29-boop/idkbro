@@ -5,7 +5,7 @@
 {% block content %}
 <div class="home-container">
     <div class="thread-view-header">
-        <a href="{{ request.referrer or url_for('index') }}" class="btn btn-secondary">Back</a>
+        <a href="{{ back_url }}" class="btn btn-secondary">Back</a>
     </div>
 
     <article class="tweet tweet-detail">
