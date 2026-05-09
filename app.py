@@ -235,6 +235,17 @@ def init_app_db():
             )
         ''')
 
+        # Primary application data. Keep JSON payloads per record so the
+        # existing app dictionaries can move to SQLite without a risky rewrite.
+        for table_name in ('app_users', 'app_tweets', 'app_notifications', 'app_messages'):
+            conn.execute(f'''
+                CREATE TABLE IF NOT EXISTS {table_name} (
+                    id TEXT PRIMARY KEY,
+                    payload TEXT NOT NULL,
+                    updated_at REAL NOT NULL
+                )
+            ''')
+
         # Jobs table for queue system
         conn.execute('''
             CREATE TABLE IF NOT EXISTS jobs (
@@ -279,6 +290,34 @@ except Exception as e:
     print("App will continue with limited functionality")
 
 def load_data():
+    sqlite_data = load_data_from_sqlite()
+    if any(sqlite_data):
+        return sqlite_data
+
+    json_data = load_data_from_json()
+    if any(json_data):
+        save_data_to_sqlite(*json_data)
+    return json_data
+
+def load_table_payloads(conn, table_name):
+    return {
+        row[0]: json.loads(row[1])
+        for row in conn.execute(f'SELECT id, payload FROM {table_name}')
+    }
+
+def load_data_from_sqlite():
+    try:
+        with sqlite3.connect(APP_DB) as conn:
+            users = load_table_payloads(conn, 'app_users')
+            tweets = load_table_payloads(conn, 'app_tweets')
+            notifications = load_table_payloads(conn, 'app_notifications')
+            messages = load_table_payloads(conn, 'app_messages')
+        return users, tweets, notifications, messages
+    except sqlite3.Error as e:
+        print(f"WARNING: Failed to load app data from SQLite: {e}")
+        return {}, {}, {}, {}
+
+def load_data_from_json():
     users = {}
     tweets = {}
     notifications = {}
@@ -314,6 +353,26 @@ def load_data():
                     messages = json.load(f)
     return users, tweets, notifications, messages
 
+def replace_table_payloads(conn, table_name, payloads):
+    now = time.time()
+    conn.execute(f'DELETE FROM {table_name}')
+    conn.executemany(
+        f'INSERT OR REPLACE INTO {table_name} (id, payload, updated_at) VALUES (?, ?, ?)',
+        [
+            (item_id, json.dumps(payload), now)
+            for item_id, payload in payloads.items()
+        ]
+    )
+
+def save_data_to_sqlite(users, tweets, notifications=None, messages=None):
+    with sqlite3.connect(APP_DB) as conn:
+        replace_table_payloads(conn, 'app_users', users)
+        replace_table_payloads(conn, 'app_tweets', tweets)
+        if notifications is not None:
+            replace_table_payloads(conn, 'app_notifications', notifications)
+        if messages is not None:
+            replace_table_payloads(conn, 'app_messages', messages)
+
 def atomic_write_json(path, payload):
     temp_path = path.with_suffix(f'{path.suffix}.tmp')
     with open(temp_path, 'w') as f:
@@ -325,23 +384,7 @@ def atomic_write_json(path, payload):
     os.replace(temp_path, path)
 
 def save_data(users, tweets, notifications=None, messages=None):
-    if DATA_LOCK:
-        with DATA_LOCK:
-            with DataFileLock():
-                atomic_write_json(USERS_FILE, users)
-                atomic_write_json(TWEETS_FILE, tweets)
-                if notifications is not None:
-                    atomic_write_json(NOTIFICATIONS_FILE, notifications)
-                if messages is not None:
-                    atomic_write_json(MESSAGES_FILE, messages)
-    else:
-        with DataFileLock():
-            atomic_write_json(USERS_FILE, users)
-            atomic_write_json(TWEETS_FILE, tweets)
-            if notifications is not None:
-                atomic_write_json(NOTIFICATIONS_FILE, notifications)
-            if messages is not None:
-                atomic_write_json(MESSAGES_FILE, messages)
+    save_data_to_sqlite(users, tweets, notifications, messages)
 
 # SQLite-based features
 
