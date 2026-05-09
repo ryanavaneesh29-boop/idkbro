@@ -1,18 +1,70 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Admin Logs</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
-</head>
-<body>
-    <div class="container">
-        <h1>Admin Logs</h1>
-        <table>
+{% extends "base.html" %}
+
+{% block title %}Admin Logs - idkbro{% endblock %}
+
+{% block content %}
+<div class="admin-logs">
+    <div class="admin-header">
+        <div>
+            <h1>Admin Logs</h1>
+            <p>Review recent app events, filtered by level, user, or keyword.</p>
+        </div>
+        <a href="{{ url_for('index') }}" class="btn btn-secondary">Back</a>
+    </div>
+
+    <div class="admin-stats">
+        <div class="admin-stat">
+            <span>Total</span>
+            <strong>{{ logs|length }}</strong>
+        </div>
+        <div class="admin-stat">
+            <span>Errors</span>
+            <strong>{{ level_counts.error }}</strong>
+        </div>
+        <div class="admin-stat">
+            <span>Warnings</span>
+            <strong>{{ level_counts.warning }}</strong>
+        </div>
+        <div class="admin-stat">
+            <span>IPs</span>
+            <strong>{{ unique_ips }}</strong>
+        </div>
+    </div>
+
+    <form method="GET" class="admin-filters">
+        <div class="admin-filter-field">
+            <label for="q">Search</label>
+            <input id="q" type="search" name="q" value="{{ search_query }}" placeholder="Message, path, user, IP">
+        </div>
+        <div class="admin-filter-field">
+            <label for="level">Level</label>
+            <select id="level" name="level">
+                <option value="" {% if not selected_level %}selected{% endif %}>All levels</option>
+                <option value="info" {% if selected_level == 'info' %}selected{% endif %}>Info</option>
+                <option value="warning" {% if selected_level == 'warning' %}selected{% endif %}>Warning</option>
+                <option value="error" {% if selected_level == 'error' %}selected{% endif %}>Error</option>
+            </select>
+        </div>
+        <div class="admin-filter-field">
+            <label for="user_id">User</label>
+            <select id="user_id" name="user_id">
+                <option value="" {% if not selected_user_id %}selected{% endif %}>All users</option>
+                {% for user in active_users %}
+                    <option value="{{ user.id }}" {% if selected_user_id == user.id %}selected{% endif %}>@{{ user.username }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="admin-filter-actions">
+            <button type="submit" class="btn btn-primary">Filter</button>
+            <a href="{{ url_for('admin_logs') }}" class="btn btn-secondary">Clear</a>
+        </div>
+    </form>
+
+    <div class="admin-log-table-wrap">
+        <table class="admin-log-table">
             <thead>
                 <tr>
-                    <th>Timestamp</th>
+                    <th>Time</th>
                     <th>Level</th>
                     <th>Message</th>
                     <th>User</th>
@@ -23,17 +75,28 @@
             <tbody>
                 {% for log in logs %}
                 <tr>
-                    <td>{{ log.timestamp }}</td>
-                    <td>{{ log.level }}</td>
-                    <td>{{ log.message }}</td>
-                    <td>{{ log.user_id or 'N/A' }}</td>
+                    <td class="admin-log-time">{{ log.timestamp }}</td>
+                    <td><span class="log-level log-level-{{ log.level }}">{{ log.level }}</span></td>
+                    <td class="admin-log-message">{{ log.message }}</td>
+                    <td>
+                        {% if log.username %}
+                            <a href="{{ url_for('profile', username=log.username) }}">@{{ log.username }}</a>
+                        {% else %}
+                            <span class="muted">N/A</span>
+                        {% endif %}
+                    </td>
                     <td>{{ log.ip or 'N/A' }}</td>
-                    <td>{{ log.path or 'N/A' }}</td>
+                    <td class="admin-log-path">{{ log.path or 'N/A' }}</td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="6">
+                        <div class="empty-state">No logs match those filters.</div>
+                    </td>
                 </tr>
                 {% endfor %}
             </tbody>
         </table>
-        <a href="{{ url_for('index') }}">Back to Home</a>
     </div>
-</body>
-</html>
+</div>
+{% endblock %}

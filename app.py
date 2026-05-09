@@ -1916,19 +1916,75 @@ def mark_message_read(message_id):
 @app.route('/admin/logs')
 @admin_required
 def admin_logs():
+    selected_level = request.args.get('level', '').strip().lower()
+    selected_user_id = request.args.get('user_id', '').strip()
+    search_query = request.args.get('q', '').strip()
+
+    if selected_level not in {'', 'info', 'warning', 'error'}:
+        selected_level = ''
+
+    raw_logs = get_logs(
+        limit=250,
+        user_id=selected_user_id or None,
+        level=selected_level or None
+    )
     logs = [
         {
+            'id': log[0],
             'timestamp': datetime.fromtimestamp(log[1]).strftime('%Y-%m-%d %H:%M:%S'),
             'level': log[2],
             'message': log[3],
             'user_id': log[4],
+            'username': users.get(log[4], {}).get('username') if log[4] else None,
             'ip': log[5],
             'path': log[6]
         }
-        for log in get_logs(limit=100)
+        for log in raw_logs
     ]
+
+    if search_query:
+        lowered_query = search_query.lower()
+        logs = [
+            log for log in logs
+            if lowered_query in ' '.join([
+                str(log.get('message') or ''),
+                str(log.get('username') or ''),
+                str(log.get('user_id') or ''),
+                str(log.get('ip') or ''),
+                str(log.get('path') or ''),
+                str(log.get('level') or '')
+            ]).lower()
+        ]
+
+    level_counts = {'info': 0, 'warning': 0, 'error': 0}
+    for log in logs:
+        level = log.get('level')
+        if level in level_counts:
+            level_counts[level] += 1
+
+    active_users = sorted(
+        [
+            {
+                'id': uid,
+                'username': user.get('username', 'unknown')
+            }
+            for uid, user in users.items()
+        ],
+        key=lambda item: item['username'].lower()
+    )
+    unique_ips = len({log['ip'] for log in logs if log.get('ip')})
     current_user = users.get(session['user_id'])
-    return render_template('admin_logs.html', logs=logs, current_user=current_user)
+    return render_template(
+        'admin_logs.html',
+        logs=logs,
+        current_user=current_user,
+        level_counts=level_counts,
+        active_users=active_users,
+        selected_level=selected_level,
+        selected_user_id=selected_user_id,
+        search_query=search_query,
+        unique_ips=unique_ips
+    )
 
 if __name__ == '__main__':
     port = int(os.getenv("PORT", 5000))
