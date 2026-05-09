@@ -82,6 +82,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const openDeleteModal = function(form, message) {
             pendingDeleteForm = form;
             deleteMessage.textContent = message || 'Are you sure you want to delete this?';
+            deleteModal.hidden = false;
             deleteModal.classList.remove('is-hidden');
             deleteModal.setAttribute('aria-hidden', 'false');
             deleteSubmit.focus();
@@ -91,6 +92,7 @@ document.addEventListener('DOMContentLoaded', function() {
             pendingDeleteForm = null;
             deleteModal.classList.add('is-hidden');
             deleteModal.setAttribute('aria-hidden', 'true');
+            deleteModal.hidden = true;
         };
 
         document.querySelectorAll('.delete-form').forEach(function(form) {
