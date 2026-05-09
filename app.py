@@ -1,5 +1,6 @@
-from flask import Flask, abort, g, render_template, request, redirect, url_for, session, send_from_directory
+from flask import Flask, abort, g, render_template, request, redirect, url_for, session, send_file, send_from_directory
 import base64
+from io import BytesIO
 import hmac
 import json
 import hashlib
@@ -1528,6 +1529,28 @@ def settings():
         pending_secret=pending_secret,
         setup_uri=setup_uri
     )
+
+@app.route('/settings/two-factor-qr')
+@login_required
+def two_factor_qr():
+    current_user = users.get(session['user_id'])
+    if not current_user or current_user.get('two_factor_enabled'):
+        abort(404)
+    pending_secret = session.get('pending_2fa_secret')
+    if not pending_secret:
+        abort(404)
+    try:
+        import qrcode
+    except ImportError:
+        abort(503)
+
+    image = qrcode.make(totp_setup_uri(current_user, pending_secret))
+    buffer = BytesIO()
+    image.save(buffer, format='PNG')
+    buffer.seek(0)
+    response = send_file(buffer, mimetype='image/png', max_age=0)
+    response.headers['Cache-Control'] = 'no-store'
+    return response
 
 @app.route('/drafts', methods=['GET','POST'])
 @login_required

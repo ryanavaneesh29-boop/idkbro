@@ -1640,6 +1640,21 @@ body.light-theme .admin-filter-field select {
     line-height: 1.5;
 }
 
+.qr-panel {
+    display: inline-flex;
+    margin-top: 0.85rem;
+    padding: 0.75rem;
+    background: #ffffff;
+    border-radius: 12px;
+    border: 1px solid rgba(148, 163, 184, 0.25);
+}
+
+.qr-panel img {
+    display: block;
+    width: 180px;
+    height: 180px;
+}
+
 body.light-theme .settings-header p,
 body.light-theme .settings-panel-header p,
 body.light-theme .two-factor-setup p,

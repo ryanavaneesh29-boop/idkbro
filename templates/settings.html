@@ -49,6 +49,9 @@
                     <span>Setup URI</span>
                     <code>{{ setup_uri }}</code>
                 </div>
+                <div class="qr-panel">
+                    <img src="{{ url_for('two_factor_qr') }}" alt="Two-step authentication QR code">
+                </div>
                 <form method="POST" class="settings-form">
                     <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
                     <input type="hidden" name="action" value="enable_2fa">
