@@ -54,9 +54,9 @@ from flask.sessions import SessionInterface, SessionMixin
 
 class SqliteSession(CallbackDict, SessionMixin):
     def __init__(self, initial=None, sid=None, new=False):
-        def on_update():
+        def on_update(self_dict):
             self.modified = True
-        CallbackDict.__init__(self, initial, on_update)
+        super().__init__(initial, on_update)
         self.sid = sid
         self.new = new
         self.modified = False
