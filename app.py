@@ -733,6 +733,7 @@ def send_password_reset_email(recipient_email, reset_link):
     smtp_username = os.getenv('SMTP_USERNAME')
     smtp_password = os.getenv('SMTP_PASSWORD')
     mail_from = os.getenv('MAIL_FROM') or smtp_username
+    use_ssl = os.getenv('SMTP_USE_SSL', '').lower() in {'1', 'true', 'yes'} or smtp_port == 465
 
     if not all([smtp_host, smtp_username, smtp_password, mail_from]):
         raise RuntimeError('Email is not configured yet. Set SMTP_HOST, SMTP_PORT, SMTP_USERNAME, SMTP_PASSWORD, and MAIL_FROM.')
@@ -747,8 +748,10 @@ def send_password_reset_email(recipient_email, reset_link):
         'This link expires in 30 minutes. If you did not request this, you can ignore this email.'
     )
 
-    with smtplib.SMTP(smtp_host, smtp_port, timeout=15) as server:
-        server.starttls()
+    smtp_class = smtplib.SMTP_SSL if use_ssl else smtplib.SMTP
+    with smtp_class(smtp_host, smtp_port, timeout=15) as server:
+        if not use_ssl:
+            server.starttls()
         server.login(smtp_username, smtp_password)
         server.send_message(message)
 
@@ -1161,7 +1164,13 @@ def login():
             if not (email_match or username_match):
                 continue
             if is_legacy_password_hash(user.get('password_hash')) and user.get('password_hash') == legacy_sha256_password(password):
-                return render_template('login.html', error='This account needs a password reset before signing in.')
+                user['password_hash'] = hash_password(password)
+                user['reset_token'] = None
+                user['reset_token_expires_at'] = None
+                save_data(users, tweets, notifications, messages)
+                session.clear()
+                session['user_id'] = uid
+                return redirect(url_for('index'))
             if verify_password(user.get('password_hash'), password):
                 session.clear()
                 session['user_id'] = uid
