@@ -1579,6 +1579,88 @@ body.light-theme .admin-filter-field select {
     border-color: rgba(148, 163, 184, 0.35);
 }
 
+/* Settings */
+.settings-container {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.settings-header h1 {
+    font-size: 1.85rem;
+    margin-bottom: 0.25rem;
+}
+
+.settings-header p,
+.settings-panel-header p,
+.two-factor-setup p {
+    color: #94a3b8;
+}
+
+.settings-panel {
+    background: rgba(30, 41, 59, 0.88);
+    border: 1px solid rgba(148, 163, 184, 0.22);
+    border-radius: 16px;
+    padding: 1.25rem;
+    box-shadow: 0 10px 28px rgba(0, 0, 0, 0.18);
+}
+
+.settings-panel-header {
+    margin-bottom: 1rem;
+}
+
+.settings-panel-header h2 {
+    font-size: 1.25rem;
+    margin-bottom: 0.25rem;
+}
+
+.settings-form {
+    margin-top: 1rem;
+}
+
+.setup-code {
+    margin-top: 0.85rem;
+    padding: 0.9rem;
+    background: rgba(15, 23, 42, 0.58);
+    border: 1px solid rgba(148, 163, 184, 0.2);
+    border-radius: 10px;
+}
+
+.setup-code span {
+    display: block;
+    color: #94a3b8;
+    font-size: 0.82rem;
+    margin-bottom: 0.35rem;
+}
+
+.setup-code code {
+    display: block;
+    color: #e2e8f0;
+    overflow-wrap: anywhere;
+    line-height: 1.5;
+}
+
+body.light-theme .settings-header p,
+body.light-theme .settings-panel-header p,
+body.light-theme .two-factor-setup p,
+body.light-theme .setup-code span {
+    color: #64748b;
+}
+
+body.light-theme .settings-panel {
+    background: rgba(255, 255, 255, 0.95);
+    border-color: rgba(148, 163, 184, 0.25);
+}
+
+body.light-theme .setup-code {
+    background: rgba(248, 250, 252, 0.95);
+    border-color: rgba(148, 163, 184, 0.25);
+}
+
+body.light-theme .setup-code code {
+    color: #1e293b;
+}
+
 /* Drafts */
 .draft-buttons {
     display: flex;

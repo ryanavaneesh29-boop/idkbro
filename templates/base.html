@@ -25,6 +25,7 @@
                 <a href="{{ url_for('who_to_follow') }}">Who to follow</a>
                 <a href="{{ url_for('drafts') }}">Drafts</a>
                 <a href="{{ url_for('profile', username=current_user.username) }}">Profile</a>
+                <a href="{{ url_for('settings') }}">Settings</a>
                 {% if current_user.is_admin %}
                     <a href="{{ url_for('admin_logs') }}">Admin Logs</a>
                 {% endif %}

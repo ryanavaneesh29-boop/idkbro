@@ -1,8 +1,11 @@
 from flask import Flask, abort, g, render_template, request, redirect, url_for, session, send_from_directory
+import base64
+import hmac
 import json
 import hashlib
 import mimetypes
 import sqlite3
+import struct
 import uuid
 import re
 import os
@@ -10,7 +13,7 @@ import secrets
 import smtplib
 import time
 import threading
-from urllib.parse import urlparse
+from urllib.parse import quote, urlparse
 from datetime import datetime, timedelta
 from email.message import EmailMessage
 from pathlib import Path
@@ -574,6 +577,41 @@ def is_legacy_password_hash(stored_hash):
 def hash_reset_token(token):
     return hashlib.sha256(token.encode()).hexdigest()
 
+def generate_totp_secret():
+    return base64.b32encode(secrets.token_bytes(20)).decode('ascii').rstrip('=')
+
+def decode_totp_secret(secret):
+    padding = '=' * (-len(secret) % 8)
+    return base64.b32decode((secret + padding).upper())
+
+def generate_totp_code(secret, for_time=None):
+    if for_time is None:
+        for_time = time.time()
+    counter = int(for_time // 30)
+    digest = hmac.new(
+        decode_totp_secret(secret),
+        struct.pack('>Q', counter),
+        hashlib.sha1
+    ).digest()
+    offset = digest[-1] & 0x0f
+    code = struct.unpack('>I', digest[offset:offset + 4])[0] & 0x7fffffff
+    return f'{code % 1000000:06d}'
+
+def verify_totp_code(secret, code, window=1):
+    clean_code = re.sub(r'\s+', '', code or '')
+    if not re.fullmatch(r'\d{6}', clean_code):
+        return False
+    now = time.time()
+    return any(
+        secrets.compare_digest(generate_totp_code(secret, now + (offset * 30)), clean_code)
+        for offset in range(-window, window + 1)
+    )
+
+def totp_setup_uri(user, secret):
+    label = quote(f'idkbro:{user.get("username", "user")}')
+    issuer = quote('idkbro')
+    return f'otpauth://totp/{label}?secret={secret}&issuer={issuer}&algorithm=SHA1&digits=6&period=30'
+
 def verify_password(stored_hash, password):
     if not stored_hash:
         return False
@@ -706,6 +744,8 @@ def normalize_user_record(uid, user):
     user.setdefault('reset_token', None)
     user.setdefault('reset_token_expires_at', None)
     user.setdefault('is_admin', False)
+    user.setdefault('two_factor_enabled', False)
+    user.setdefault('two_factor_secret', None)
     return user
 
 def normalize_tweet_record(tid, tweet):
@@ -1241,16 +1281,42 @@ def login():
                 user['reset_token_expires_at'] = None
                 save_data(users, tweets, notifications, messages)
                 rotate_session()
+                if user.get('two_factor_enabled') and user.get('two_factor_secret'):
+                    session['pending_2fa_user_id'] = uid
+                    return redirect(url_for('two_step_login'))
                 session['user_id'] = uid
                 return redirect(url_for('index'))
             if verify_password(user.get('password_hash'), password):
                 rotate_session()
+                if user.get('two_factor_enabled') and user.get('two_factor_secret'):
+                    session['pending_2fa_user_id'] = uid
+                    return redirect(url_for('two_step_login'))
                 session['user_id'] = uid
                 return redirect(url_for('index'))
 
         return render_template('login.html', error='Invalid email or password')
 
     return render_template('login.html')
+
+@app.route('/two-step', methods=['GET', 'POST'])
+def two_step_login():
+    uid = session.get('pending_2fa_user_id')
+    user = users.get(uid)
+    if not user or not user.get('two_factor_enabled') or not user.get('two_factor_secret'):
+        session.pop('pending_2fa_user_id', None)
+        return redirect(url_for('login'))
+
+    if request.method == 'POST':
+        client_id = client_ip()
+        if is_rate_limited('two-step', client_id, 10, 300) or is_rate_limited('two-step', uid, 8, 300):
+            return render_template('two_step.html', error='Too many attempts. Please wait a few minutes and try again.'), 429
+        if verify_totp_code(user['two_factor_secret'], request.form.get('code', '')):
+            rotate_session()
+            session['user_id'] = uid
+            return redirect(url_for('index'))
+        return render_template('two_step.html', error='Invalid authentication code')
+
+    return render_template('two_step.html')
 
 @app.route('/register', methods=['GET', 'POST'])
 def register():
@@ -1299,6 +1365,8 @@ def register():
             'blocked': [],
             'is_private': False,
             'pinned_tweet': None,
+            'two_factor_enabled': False,
+            'two_factor_secret': None,
             'created_at': datetime.now().isoformat()
         }
         save_data(users, tweets, notifications, messages)
@@ -1376,6 +1444,90 @@ def logout():
     if old_sid:
         delete_session(old_sid)
     return redirect(url_for('login'))
+
+@app.route('/settings', methods=['GET', 'POST'])
+@login_required
+def settings():
+    current_user = users.get(session['user_id'])
+    if not current_user:
+        session.clear()
+        return redirect(url_for('login'))
+
+    pending_secret = session.get('pending_2fa_secret')
+    if not current_user.get('two_factor_enabled') and not pending_secret:
+        pending_secret = generate_totp_secret()
+        session['pending_2fa_secret'] = pending_secret
+
+    setup_uri = totp_setup_uri(current_user, pending_secret) if pending_secret else None
+
+    if request.method == 'POST':
+        action = request.form.get('action')
+        if action == 'refresh_2fa':
+            session['pending_2fa_secret'] = generate_totp_secret()
+            return redirect(url_for('settings'))
+
+        if action == 'enable_2fa':
+            secret = session.get('pending_2fa_secret')
+            if not secret:
+                session['pending_2fa_secret'] = generate_totp_secret()
+                return redirect(url_for('settings'))
+            if not verify_totp_code(secret, request.form.get('code', '')):
+                return render_template(
+                    'settings.html',
+                    current_user=current_user,
+                    pending_secret=secret,
+                    setup_uri=totp_setup_uri(current_user, secret),
+                    error='That authentication code did not match.'
+                )
+            current_user['two_factor_enabled'] = True
+            current_user['two_factor_secret'] = secret
+            session.pop('pending_2fa_secret', None)
+            save_data(users, tweets, notifications, messages)
+            return render_template(
+                'settings.html',
+                current_user=current_user,
+                pending_secret=None,
+                setup_uri=None,
+                success='Two-step authentication is now on.'
+            )
+
+        if action == 'disable_2fa':
+            password = request.form.get('password', '')
+            code = request.form.get('code', '')
+            if not verify_password(current_user.get('password_hash'), password):
+                return render_template(
+                    'settings.html',
+                    current_user=current_user,
+                    pending_secret=pending_secret,
+                    setup_uri=setup_uri,
+                    error='Password did not match.'
+                )
+            if current_user.get('two_factor_enabled') and not verify_totp_code(current_user.get('two_factor_secret'), code):
+                return render_template(
+                    'settings.html',
+                    current_user=current_user,
+                    pending_secret=pending_secret,
+                    setup_uri=setup_uri,
+                    error='Authentication code did not match.'
+                )
+            current_user['two_factor_enabled'] = False
+            current_user['two_factor_secret'] = None
+            session['pending_2fa_secret'] = generate_totp_secret()
+            save_data(users, tweets, notifications, messages)
+            return render_template(
+                'settings.html',
+                current_user=current_user,
+                pending_secret=session['pending_2fa_secret'],
+                setup_uri=totp_setup_uri(current_user, session['pending_2fa_secret']),
+                success='Two-step authentication is now off.'
+            )
+
+    return render_template(
+        'settings.html',
+        current_user=current_user,
+        pending_secret=pending_secret,
+        setup_uri=setup_uri
+    )
 
 @app.route('/drafts', methods=['GET','POST'])
 @login_required

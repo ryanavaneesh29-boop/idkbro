@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+
+{% block title %}Two-Step Login - idkbro{% endblock %}
+
+{% block content %}
+<div class="auth-container">
+    <h2>Two-step login</h2>
+    {% if error %}
+    <div class="error">{{ error }}</div>
+    {% endif %}
+    <form method="POST">
+        <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+        <div class="form-group">
+            <label>Authentication code</label>
+            <input type="text" name="code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" placeholder="123456" required>
+        </div>
+        <button type="submit" class="btn btn-primary btn-full">Verify</button>
+    </form>
+    <p class="auth-links"><a href="{{ url_for('login') }}">Back to login</a></p>
+</div>
+{% endblock %}

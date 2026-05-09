@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+
+{% block title %}Settings - idkbro{% endblock %}
+
+{% block content %}
+<div class="settings-container">
+    <div class="settings-header">
+        <h1>Settings</h1>
+        <p>Manage your account security.</p>
+    </div>
+
+    {% if error %}
+    <div class="error">{{ error }}</div>
+    {% endif %}
+    {% if success %}
+    <div class="success">{{ success }}</div>
+    {% endif %}
+
+    <section class="settings-panel">
+        <div class="settings-panel-header">
+            <div>
+                <h2>Two-step authentication</h2>
+                <p>Status: <strong>{% if current_user.two_factor_enabled %}On{% else %}Off{% endif %}</strong></p>
+            </div>
+        </div>
+
+        {% if current_user.two_factor_enabled %}
+            <form method="POST" class="settings-form">
+                <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="action" value="disable_2fa">
+                <div class="form-group">
+                    <label>Current password</label>
+                    <input type="password" name="password" required>
+                </div>
+                <div class="form-group">
+                    <label>Authentication code</label>
+                    <input type="text" name="code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" required>
+                </div>
+                <button type="submit" class="btn btn-secondary">Turn Off</button>
+            </form>
+        {% else %}
+            <div class="two-factor-setup">
+                <p>Add a new account in your authenticator app, then enter the 6-digit code it shows.</p>
+                <div class="setup-code">
+                    <span>Setup key</span>
+                    <code>{{ pending_secret }}</code>
+                </div>
+                <div class="setup-code">
+                    <span>Setup URI</span>
+                    <code>{{ setup_uri }}</code>
+                </div>
+                <form method="POST" class="settings-form">
+                    <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+                    <input type="hidden" name="action" value="enable_2fa">
+                    <div class="form-group">
+                        <label>Authentication code</label>
+                        <input type="text" name="code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" placeholder="123456" required>
+                    </div>
+                    <button type="submit" class="btn btn-primary">Turn On</button>
+                </form>
+                <form method="POST" class="settings-form">
+                    <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+                    <input type="hidden" name="action" value="refresh_2fa">
+                    <button type="submit" class="btn btn-secondary">New Setup Key</button>
+                </form>
+            </div>
+        {% endif %}
+    </section>
+</div>
+{% endblock %}
