@@ -23,12 +23,12 @@
             <tbody>
                 {% for log in logs %}
                 <tr>
-                    <td>{{ log[1] | strftime('%Y-%m-%d %H:%M:%S') }}</td>
-                    <td>{{ log[2] }}</td>
-                    <td>{{ log[3] }}</td>
-                    <td>{{ log[4] or 'N/A' }}</td>
-                    <td>{{ log[5] or 'N/A' }}</td>
-                    <td>{{ log[6] or 'N/A' }}</td>
+                    <td>{{ log.timestamp }}</td>
+                    <td>{{ log.level }}</td>
+                    <td>{{ log.message }}</td>
+                    <td>{{ log.user_id or 'N/A' }}</td>
+                    <td>{{ log.ip or 'N/A' }}</td>
+                    <td>{{ log.path or 'N/A' }}</td>
                 </tr>
                 {% endfor %}
             </tbody>

@@ -1916,7 +1916,17 @@ def mark_message_read(message_id):
 @app.route('/admin/logs')
 @admin_required
 def admin_logs():
-    logs = get_logs(limit=100)
+    logs = [
+        {
+            'timestamp': datetime.fromtimestamp(log[1]).strftime('%Y-%m-%d %H:%M:%S'),
+            'level': log[2],
+            'message': log[3],
+            'user_id': log[4],
+            'ip': log[5],
+            'path': log[6]
+        }
+        for log in get_logs(limit=100)
+    ]
     current_user = users.get(session['user_id'])
     return render_template('admin_logs.html', logs=logs, current_user=current_user)
 
