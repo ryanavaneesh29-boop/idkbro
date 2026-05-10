@@ -1,4 +1,4 @@
-from flask import Flask, abort, g, render_template, request, redirect, url_for, session, send_file, send_from_directory
+from flask import Flask, request, session, redirect, url_for, render_template, flash, abort, send_from_directory
 import base64
 from io import BytesIO
 import hmac
@@ -1540,7 +1540,7 @@ def two_factor_qr():
     if not pending_secret:
         abort(404)
     try:
-        import qrcode
+        import qrcode 
     except ImportError:
         abort(503)
 
