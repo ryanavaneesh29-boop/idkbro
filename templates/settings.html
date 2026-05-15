@@ -6,7 +6,7 @@
 <div class="settings-container">
     <div class="settings-header">
         <h1>Settings</h1>
-        <p>Manage your account security.</p>
+        <p>Manage your account security and privacy.</p>
     </div>
 
     {% if error %}
@@ -68,6 +68,39 @@
                 </form>
             </div>
         {% endif %}
+    </section>
+
+    <section class="settings-panel">
+        <div class="settings-panel-header">
+            <div>
+                <h2>Your data</h2>
+                <p>Download your account data or permanently delete your account.</p>
+            </div>
+        </div>
+
+        <form method="POST" class="settings-form">
+            <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="action" value="export_data">
+            <div class="form-group">
+                <label>Current password</label>
+                <input type="password" name="password" required>
+            </div>
+            <button type="submit" class="btn btn-secondary">Download Data</button>
+        </form>
+
+        <form method="POST" class="settings-form danger-zone">
+            <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="action" value="delete_account">
+            <div class="form-group">
+                <label>Current password</label>
+                <input type="password" name="password" required>
+            </div>
+            <div class="form-group">
+                <label>Type DELETE to confirm</label>
+                <input type="text" name="confirm_text" required>
+            </div>
+            <button type="submit" class="btn btn-danger">Delete Account</button>
+        </form>
     </section>
 </div>
 {% endblock %}

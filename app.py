@@ -1,4 +1,4 @@
-from flask import Flask, request, session, redirect, url_for, render_template, flash, abort, send_from_directory
+from flask import Flask, request, session, redirect, url_for, render_template, flash, abort, send_file, send_from_directory
 import base64
 from io import BytesIO
 import hmac
@@ -151,6 +151,9 @@ ALLOWED_MEDIA_MIME_TYPES = {
 DATA_LOCK = None  # Disable threading locks for WSGI compatibility
 RESET_REQUEST_MESSAGE = 'If an account exists for that email, we emailed a password reset link.'
 PUBLIC_BASE_URL = os.getenv('PUBLIC_BASE_URL', '').rstrip('/')
+LOG_IP_ADDRESSES = os.getenv('LOG_IP_ADDRESSES', '').lower() in {'1', 'true', 'yes'}
+LOG_RETENTION_DAYS = int(os.getenv('LOG_RETENTION_DAYS', '90'))
+RATE_LIMIT_RETENTION_DAYS = int(os.getenv('RATE_LIMIT_RETENTION_DAYS', '2'))
 TRUSTED_HOSTS = {
     host.strip().lower()
     for host in os.getenv('TRUSTED_HOSTS', 'localhost,127.0.0.1').split(',')
@@ -420,6 +423,16 @@ def cleanup_sessions():
     with sqlite3.connect(APP_DB) as conn:
         conn.execute('DELETE FROM sessions WHERE expires_at <= ?', (time.time(),))
 
+def cleanup_rate_limits():
+    cutoff = time.time() - (RATE_LIMIT_RETENTION_DAYS * 24 * 60 * 60)
+    with sqlite3.connect(RATE_LIMITS_DB) as conn:
+        conn.execute('DELETE FROM attempts WHERE timestamp <= ?', (cutoff,))
+
+def cleanup_logs():
+    cutoff = time.time() - (LOG_RETENTION_DAYS * 24 * 60 * 60)
+    with sqlite3.connect(APP_DB) as conn:
+        conn.execute('DELETE FROM logs WHERE timestamp <= ?', (cutoff,))
+
 def rotate_session():
     old_sid = getattr(session, 'sid', None)
     session.clear()
@@ -431,10 +444,11 @@ def rotate_session():
 
 # Logging and Analytics
 def log_event(level, message, user_id=None, ip=None, path=None):
+    stored_ip = ip if LOG_IP_ADDRESSES else None
     with sqlite3.connect(APP_DB) as conn:
         conn.execute(
             'INSERT INTO logs (timestamp, level, message, user_id, ip, path) VALUES (?, ?, ?, ?, ?, ?)',
-            (time.time(), level, message, user_id, ip, path)
+            (time.time(), level, message, user_id, stored_ip, path)
         )
 
 def get_logs(limit=100, user_id=None, level=None):
@@ -681,6 +695,9 @@ def safe_redirect_url(default_endpoint='index'):
 def validate_request_security():
     if request.path.startswith('/static/uploads/'):
         abort(404)
+    cleanup_sessions()
+    cleanup_rate_limits()
+    cleanup_logs()
     # Skip host validation if PUBLIC_BASE_URL is not set (more permissive for development/testing)
     if PUBLIC_BASE_URL and not is_trusted_host(request_host()):
         abort(400)
@@ -700,8 +717,8 @@ def add_security_headers(response):
         'Content-Security-Policy',
         "default-src 'self'; "
         "script-src 'self'; "
-        "style-src 'self' https://fonts.googleapis.com; "
-        "font-src 'self' https://fonts.gstatic.com; "
+        "style-src 'self'; "
+        "font-src 'self'; "
         f"img-src 'self' data: {media_csp_source}; "
         f"media-src 'self' {media_csp_source}; "
         "form-action 'self'; "
@@ -1098,6 +1115,97 @@ def delete_tweet_tree(tweet_id):
     delete_fts_tweet(tweet_id)
     log_event('info', f'Tweet {tweet_id} deleted', user_id=tweet.get('user_id'))
 
+def scrub_user_from_relationships(user_id):
+    for user in users.values():
+        for field in ('following', 'followers', 'pending_requests', 'blocked'):
+            if field in user:
+                user[field] = [uid for uid in user.get(field, []) if uid != user_id]
+        if user.get('pinned_tweet') and user.get('pinned_tweet') not in tweets:
+            user['pinned_tweet'] = None
+
+    for tweet in tweets.values():
+        tweet['likes'] = [uid for uid in tweet.get('likes', []) if uid != user_id]
+        tweet['retweets'] = [uid for uid in tweet.get('retweets', []) if uid != user_id]
+
+def delete_user_sessions(user_id):
+    with sqlite3.connect(APP_DB) as conn:
+        rows = conn.execute('SELECT session_id, data FROM sessions').fetchall()
+        for sid, raw_data in rows:
+            try:
+                session_data = json.loads(raw_data)
+            except json.JSONDecodeError:
+                continue
+            if session_data.get('user_id') == user_id or session_data.get('pending_2fa_user_id') == user_id:
+                conn.execute('DELETE FROM sessions WHERE session_id = ?', (sid,))
+
+def delete_account_data(user_id):
+    current_user = users.get(user_id)
+    if not current_user:
+        return
+
+    for tweet_id in [
+        tid for tid, tweet in list(tweets.items())
+        if tweet.get('user_id') == user_id
+    ]:
+        delete_tweet_tree(tweet_id)
+
+    for message_id in [
+        mid for mid, message in list(messages.items())
+        if user_id in {message.get('sender_id'), message.get('receiver_id')}
+    ]:
+        del messages[message_id]
+
+    for notification_id in [
+        nid for nid, notification in list(notifications.items())
+        if user_id in {notification.get('user_id'), notification.get('from_user_id')}
+    ]:
+        del notifications[notification_id]
+
+    scrub_user_from_relationships(user_id)
+    users.pop(user_id, None)
+    delete_user_sessions(user_id)
+    with sqlite3.connect(APP_DB) as conn:
+        conn.execute('DELETE FROM logs WHERE user_id = ?', (user_id,))
+
+def build_personal_data_export(user_id):
+    current_user = users.get(user_id)
+    user_export = {
+        key: value for key, value in (current_user or {}).items()
+        if key not in {'password_hash', 'reset_token', 'reset_token_expires_at', 'two_factor_secret'}
+    }
+    user_export['two_factor_enabled'] = bool((current_user or {}).get('two_factor_enabled'))
+
+    authored_tweets = [
+        tweet for tweet in tweets.values()
+        if tweet.get('user_id') == user_id
+    ]
+    related_messages = [
+        message for message in messages.values()
+        if user_id in {message.get('sender_id'), message.get('receiver_id')}
+    ]
+    related_notifications = [
+        notification for notification in notifications.values()
+        if user_id in {notification.get('user_id'), notification.get('from_user_id')}
+    ]
+    user_logs = [
+        {
+            'timestamp': datetime.fromtimestamp(log[1]).isoformat(),
+            'level': log[2],
+            'message': log[3],
+            'path': log[6]
+        }
+        for log in get_logs(limit=1000, user_id=user_id)
+    ]
+
+    return {
+        'exported_at': datetime.utcnow().isoformat() + 'Z',
+        'account': user_export,
+        'posts': authored_tweets,
+        'messages': related_messages,
+        'notifications': related_notifications,
+        'logs': user_logs
+    }
+
 def build_user_list_entry(user_id, viewer_id):
     user = users.get(user_id)
     if not user:
@@ -1243,6 +1351,13 @@ def index():
                          can_delete_tweet_id=can_delete_tweet_id,
                          viewer_id=session['user_id'])
 
+@app.route('/privacy')
+def privacy():
+    return render_template(
+        'privacy.html',
+        current_user=users.get(session.get('user_id'))
+    )
+
 @app.route('/media/<path:filename>')
 def media_file(filename):
     if not is_safe_media_filename(filename):
@@ -1330,11 +1445,14 @@ def register():
         display_name = request.form['display_name']
         password = request.form['password']
         bio = request.form.get('bio', '')
+        privacy_ack = request.form.get('privacy_ack') == 'on'
 
         if not is_valid_username(username):
             return render_template('register.html', error='Username must be 3-30 characters and use only letters, numbers, and underscores')
         if len(display_name) > 60 or len(bio) > 160:
             return render_template('register.html', error='Display name or bio is too long')
+        if not privacy_ack:
+            return render_template('register.html', error='Please confirm that you have read the privacy notice')
 
         # Check if username exists
         for user in users.values():
@@ -1368,6 +1486,7 @@ def register():
             'pinned_tweet': None,
             'two_factor_enabled': False,
             'two_factor_secret': None,
+            'privacy_notice_accepted_at': datetime.utcnow().isoformat() + 'Z',
             'created_at': datetime.now().isoformat()
         }
         save_data(users, tweets, notifications, messages)
@@ -1522,6 +1641,53 @@ def settings():
                 setup_uri=totp_setup_uri(current_user, session['pending_2fa_secret']),
                 success='Two-step authentication is now off.'
             )
+
+        if action == 'export_data':
+            password = request.form.get('password', '')
+            if not verify_password(current_user.get('password_hash'), password):
+                return render_template(
+                    'settings.html',
+                    current_user=current_user,
+                    pending_secret=pending_secret,
+                    setup_uri=setup_uri,
+                    error='Password did not match.'
+                )
+            export_payload = build_personal_data_export(session['user_id'])
+            response = app.response_class(
+                json.dumps(export_payload, indent=2),
+                mimetype='application/json'
+            )
+            response.headers['Content-Disposition'] = 'attachment; filename="idkbro-personal-data.json"'
+            response.headers['Cache-Control'] = 'no-store'
+            return response
+
+        if action == 'delete_account':
+            password = request.form.get('password', '')
+            confirm_text = request.form.get('confirm_text', '').strip().upper()
+            if confirm_text != 'DELETE':
+                return render_template(
+                    'settings.html',
+                    current_user=current_user,
+                    pending_secret=pending_secret,
+                    setup_uri=setup_uri,
+                    error='Type DELETE to confirm account deletion.'
+                )
+            if not verify_password(current_user.get('password_hash'), password):
+                return render_template(
+                    'settings.html',
+                    current_user=current_user,
+                    pending_secret=pending_secret,
+                    setup_uri=setup_uri,
+                    error='Password did not match.'
+                )
+            deleted_user_id = session['user_id']
+            old_sid = getattr(session, 'sid', None)
+            session.clear()
+            delete_account_data(deleted_user_id)
+            save_data(users, tweets, notifications, messages)
+            if old_sid:
+                delete_session(old_sid)
+            return redirect(url_for('register'))
 
     return render_template(
         'settings.html',

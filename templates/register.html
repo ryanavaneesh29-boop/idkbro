@@ -30,6 +30,10 @@
             <label>Bio (optional)</label>
             <textarea name="bio" rows="2" maxlength="160"></textarea>
         </div>
+        <label class="checkbox-row">
+            <input type="checkbox" name="privacy_ack" required>
+            <span>I have read the <a href="{{ url_for('privacy') }}" target="_blank" rel="noopener">privacy notice</a>.</span>
+        </label>
         <button type="submit" class="btn btn-primary btn-full">Sign Up</button>
     </form>
     <p class="auth-links">Already have an account? <a href="{{ url_for('login') }}">Login</a></p>
