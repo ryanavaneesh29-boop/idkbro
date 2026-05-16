@@ -29,6 +29,7 @@
                 {% if current_user.is_admin %}
                     <a href="{{ url_for('admin_logs') }}">Admin Logs</a>
                 {% endif %}
+                <a href="{{ url_for('settings', tab='privacy') }}">Privacy</a>
                 <form action="{{ url_for('toggle_theme') }}" method="POST" class="nav-inline-form">
                     <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
                     <button type="submit" class="theme-toggle">Theme</button>
@@ -40,8 +41,8 @@
             {% else %}
                 <a href="{{ url_for('login') }}">Login</a>
                 <a href="{{ url_for('register') }}">Register</a>
+                <a href="{{ url_for('privacy') }}">Privacy</a>
             {% endif %}
-            <a href="{{ url_for('privacy') }}">Privacy</a>
         </div>
     </nav>
 

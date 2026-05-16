@@ -877,6 +877,20 @@ def build_password_reset_link(token):
         return f"{PUBLIC_BASE_URL}{url_for('reset_password', token=token)}"
     return url_for('reset_password', token=token, _external=True)
 
+def build_totp_qr_data_uri(user, secret):
+    if not secret:
+        return None
+    try:
+        import qrcode
+    except ImportError:
+        return None
+
+    image = qrcode.make(totp_setup_uri(user, secret))
+    buffer = BytesIO()
+    image.save(buffer, format='PNG')
+    encoded_qr = base64.b64encode(buffer.getvalue()).decode('ascii')
+    return f"data:image/png;base64,{encoded_qr}"
+
 def get_user_by_username(username):
     for uid, user in users.items():
         if user['username'] == username:
@@ -1579,22 +1593,38 @@ def settings():
         session['pending_2fa_secret'] = pending_secret
 
     setup_uri = totp_setup_uri(current_user, pending_secret) if pending_secret else None
+    active_tab = request.args.get('tab', 'security')
+    if active_tab not in {'security', 'privacy', 'data'}:
+        active_tab = 'security'
+
+    def render_settings(active='security', **context):
+        selected_tab = active if active in {'security', 'privacy', 'data'} else 'security'
+        selected_secret = context.pop('pending_secret', pending_secret)
+        selected_setup_uri = context.pop('setup_uri', setup_uri)
+        return render_template(
+            'settings.html',
+            current_user=current_user,
+            pending_secret=selected_secret,
+            setup_uri=selected_setup_uri,
+            qr_data_uri=build_totp_qr_data_uri(current_user, selected_secret),
+            active_tab=selected_tab,
+            **context
+        )
 
     if request.method == 'POST':
         action = request.form.get('action')
         if action == 'refresh_2fa':
             session['pending_2fa_secret'] = generate_totp_secret()
-            return redirect(url_for('settings'))
+            return redirect(url_for('settings', tab='security'))
 
         if action == 'enable_2fa':
             secret = session.get('pending_2fa_secret')
             if not secret:
                 session['pending_2fa_secret'] = generate_totp_secret()
-                return redirect(url_for('settings'))
+                return redirect(url_for('settings', tab='security'))
             if not verify_totp_code(secret, request.form.get('code', '')):
-                return render_template(
-                    'settings.html',
-                    current_user=current_user,
+                return render_settings(
+                    active='security',
                     pending_secret=secret,
                     setup_uri=totp_setup_uri(current_user, secret),
                     error='That authentication code did not match.'
@@ -1603,9 +1633,8 @@ def settings():
             current_user['two_factor_secret'] = secret
             session.pop('pending_2fa_secret', None)
             save_data(users, tweets, notifications, messages)
-            return render_template(
-                'settings.html',
-                current_user=current_user,
+            return render_settings(
+                active='security',
                 pending_secret=None,
                 setup_uri=None,
                 success='Two-step authentication is now on.'
@@ -1615,17 +1644,15 @@ def settings():
             password = request.form.get('password', '')
             code = request.form.get('code', '')
             if not verify_password(current_user.get('password_hash'), password):
-                return render_template(
-                    'settings.html',
-                    current_user=current_user,
+                return render_settings(
+                    active='security',
                     pending_secret=pending_secret,
                     setup_uri=setup_uri,
                     error='Password did not match.'
                 )
             if current_user.get('two_factor_enabled') and not verify_totp_code(current_user.get('two_factor_secret'), code):
-                return render_template(
-                    'settings.html',
-                    current_user=current_user,
+                return render_settings(
+                    active='security',
                     pending_secret=pending_secret,
                     setup_uri=setup_uri,
                     error='Authentication code did not match.'
@@ -1634,9 +1661,8 @@ def settings():
             current_user['two_factor_secret'] = None
             session['pending_2fa_secret'] = generate_totp_secret()
             save_data(users, tweets, notifications, messages)
-            return render_template(
-                'settings.html',
-                current_user=current_user,
+            return render_settings(
+                active='security',
                 pending_secret=session['pending_2fa_secret'],
                 setup_uri=totp_setup_uri(current_user, session['pending_2fa_secret']),
                 success='Two-step authentication is now off.'
@@ -1645,9 +1671,8 @@ def settings():
         if action == 'export_data':
             password = request.form.get('password', '')
             if not verify_password(current_user.get('password_hash'), password):
-                return render_template(
-                    'settings.html',
-                    current_user=current_user,
+                return render_settings(
+                    active='data',
                     pending_secret=pending_secret,
                     setup_uri=setup_uri,
                     error='Password did not match.'
@@ -1665,17 +1690,15 @@ def settings():
             password = request.form.get('password', '')
             confirm_text = request.form.get('confirm_text', '').strip().upper()
             if confirm_text != 'DELETE':
-                return render_template(
-                    'settings.html',
-                    current_user=current_user,
+                return render_settings(
+                    active='data',
                     pending_secret=pending_secret,
                     setup_uri=setup_uri,
                     error='Type DELETE to confirm account deletion.'
                 )
             if not verify_password(current_user.get('password_hash'), password):
-                return render_template(
-                    'settings.html',
-                    current_user=current_user,
+                return render_settings(
+                    active='data',
                     pending_secret=pending_secret,
                     setup_uri=setup_uri,
                     error='Password did not match.'
@@ -1689,12 +1712,7 @@ def settings():
                 delete_session(old_sid)
             return redirect(url_for('register'))
 
-    return render_template(
-        'settings.html',
-        current_user=current_user,
-        pending_secret=pending_secret,
-        setup_uri=setup_uri
-    )
+    return render_settings(active=active_tab)
 
 @app.route('/settings/two-factor-qr')
 @login_required

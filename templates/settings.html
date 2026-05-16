@@ -16,91 +16,147 @@
     <div class="success">{{ success }}</div>
     {% endif %}
 
-    <section class="settings-panel">
-        <div class="settings-panel-header">
-            <div>
-                <h2>Two-step authentication</h2>
-                <p>Status: <strong>{% if current_user.two_factor_enabled %}On{% else %}Off{% endif %}</strong></p>
-            </div>
-        </div>
+    <div class="settings-layout">
+        <aside class="settings-tabs" aria-label="Settings sections">
+            <a class="settings-tab {% if active_tab == 'security' %}active{% endif %}" href="{{ url_for('settings', tab='security') }}">
+                <span>Security</span>
+                <small>Two-step auth</small>
+            </a>
+            <a class="settings-tab {% if active_tab == 'privacy' %}active{% endif %}" href="{{ url_for('settings', tab='privacy') }}">
+                <span>Privacy</span>
+                <small>Notice and rights</small>
+            </a>
+            <a class="settings-tab {% if active_tab == 'data' %}active{% endif %}" href="{{ url_for('settings', tab='data') }}">
+                <span>Your data</span>
+                <small>Export or delete</small>
+            </a>
+        </aside>
 
-        {% if current_user.two_factor_enabled %}
-            <form method="POST" class="settings-form">
-                <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
-                <input type="hidden" name="action" value="disable_2fa">
-                <div class="form-group">
-                    <label>Current password</label>
-                    <input type="password" name="password" required>
-                </div>
-                <div class="form-group">
-                    <label>Authentication code</label>
-                    <input type="text" name="code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" required>
-                </div>
-                <button type="submit" class="btn btn-secondary">Turn Off</button>
-            </form>
-        {% else %}
-            <div class="two-factor-setup">
-                <p>Add a new account in your authenticator app, then enter the 6-digit code it shows.</p>
-                <div class="setup-code">
-                    <span>Setup key</span>
-                    <code>{{ pending_secret }}</code>
-                </div>
-                <div class="setup-code">
-                    <span>Setup URI</span>
-                    <code>{{ setup_uri }}</code>
-                </div>
-                <div class="qr-panel">
-                    <img src="{{ url_for('two_factor_qr') }}" alt="Two-step authentication QR code">
-                </div>
-                <form method="POST" class="settings-form">
-                    <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
-                    <input type="hidden" name="action" value="enable_2fa">
-                    <div class="form-group">
-                        <label>Authentication code</label>
-                        <input type="text" name="code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" placeholder="123456" required>
+        <div class="settings-content">
+            {% if active_tab == 'security' %}
+            <section class="settings-panel">
+                <div class="settings-panel-header">
+                    <div>
+                        <h2>Two-step authentication</h2>
+                        <p>Status: <strong>{% if current_user.two_factor_enabled %}On{% else %}Off{% endif %}</strong></p>
                     </div>
-                    <button type="submit" class="btn btn-primary">Turn On</button>
-                </form>
+                </div>
+
+                {% if current_user.two_factor_enabled %}
+                    <form method="POST" class="settings-form">
+                        <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+                        <input type="hidden" name="action" value="disable_2fa">
+                        <div class="form-group">
+                            <label>Current password</label>
+                            <input type="password" name="password" required>
+                        </div>
+                        <div class="form-group">
+                            <label>Authentication code</label>
+                            <input type="text" name="code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" required>
+                        </div>
+                        <button type="submit" class="btn btn-secondary">Turn Off</button>
+                    </form>
+                {% else %}
+                    <div class="two-factor-setup">
+                        <p>Add a new account in your authenticator app, then enter the 6-digit code it shows.</p>
+                        <div class="qr-and-code">
+                            <div class="qr-panel">
+                                {% if qr_data_uri %}
+                                    <img src="{{ qr_data_uri }}" alt="Two-step authentication QR code">
+                                {% else %}
+                                    <p class="qr-fallback">QR code generation is unavailable. Use the setup key below.</p>
+                                {% endif %}
+                            </div>
+                            <div class="setup-code-stack">
+                                <div class="setup-code">
+                                    <span>Setup key</span>
+                                    <code>{{ pending_secret }}</code>
+                                </div>
+                                <div class="setup-code">
+                                    <span>Setup URI</span>
+                                    <code>{{ setup_uri }}</code>
+                                </div>
+                            </div>
+                        </div>
+                        <form method="POST" class="settings-form">
+                            <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+                            <input type="hidden" name="action" value="enable_2fa">
+                            <div class="form-group">
+                                <label>Authentication code</label>
+                                <input type="text" name="code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" placeholder="123456" required>
+                            </div>
+                            <button type="submit" class="btn btn-primary">Turn On</button>
+                        </form>
+                        <form method="POST" class="settings-form">
+                            <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+                            <input type="hidden" name="action" value="refresh_2fa">
+                            <button type="submit" class="btn btn-secondary">New Setup Key</button>
+                        </form>
+                    </div>
+                {% endif %}
+            </section>
+            {% elif active_tab == 'privacy' %}
+            <section class="settings-panel">
+                <div class="settings-panel-header">
+                    <div>
+                        <h2>Privacy</h2>
+                        <p>How idkbro uses account data and what controls you have.</p>
+                    </div>
+                </div>
+                <div class="privacy-summary">
+                    <section>
+                        <h3>What we collect</h3>
+                        <p>Username, email address, display name, bio, password hash, two-step status, posts, media uploads, drafts, follows, blocks, likes, reposts, messages, notifications, and security logs.</p>
+                    </section>
+                    <section>
+                        <h3>Why we use it</h3>
+                        <p>To provide the service, keep accounts secure, prevent abuse, deliver messages and notifications, and let you manage your profile and privacy settings.</p>
+                    </section>
+                    <section>
+                        <h3>Cookies</h3>
+                        <p>The app uses a strictly necessary session cookie. It does not set analytics or advertising cookies.</p>
+                    </section>
+                    <section>
+                        <h3>Your rights</h3>
+                        <p>You can download your data or delete your account from the Your data tab. Account deletion removes your profile, posts, uploaded media, messages, notifications, sessions, relationship links, and user-specific logs.</p>
+                    </section>
+                </div>
+            </section>
+            {% else %}
+            <section class="settings-panel">
+                <div class="settings-panel-header">
+                    <div>
+                        <h2>Your data</h2>
+                        <p>Download your account data or permanently delete your account.</p>
+                    </div>
+                </div>
+
                 <form method="POST" class="settings-form">
                     <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
-                    <input type="hidden" name="action" value="refresh_2fa">
-                    <button type="submit" class="btn btn-secondary">New Setup Key</button>
+                    <input type="hidden" name="action" value="export_data">
+                    <div class="form-group">
+                        <label>Current password</label>
+                        <input type="password" name="password" required>
+                    </div>
+                    <button type="submit" class="btn btn-secondary">Download Data</button>
                 </form>
-            </div>
-        {% endif %}
-    </section>
 
-    <section class="settings-panel">
-        <div class="settings-panel-header">
-            <div>
-                <h2>Your data</h2>
-                <p>Download your account data or permanently delete your account.</p>
-            </div>
+                <form method="POST" class="settings-form danger-zone">
+                    <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+                    <input type="hidden" name="action" value="delete_account">
+                    <div class="form-group">
+                        <label>Current password</label>
+                        <input type="password" name="password" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Type DELETE to confirm</label>
+                        <input type="text" name="confirm_text" required>
+                    </div>
+                    <button type="submit" class="btn btn-danger">Delete Account</button>
+                </form>
+            </section>
+            {% endif %}
         </div>
-
-        <form method="POST" class="settings-form">
-            <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
-            <input type="hidden" name="action" value="export_data">
-            <div class="form-group">
-                <label>Current password</label>
-                <input type="password" name="password" required>
-            </div>
-            <button type="submit" class="btn btn-secondary">Download Data</button>
-        </form>
-
-        <form method="POST" class="settings-form danger-zone">
-            <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
-            <input type="hidden" name="action" value="delete_account">
-            <div class="form-group">
-                <label>Current password</label>
-                <input type="password" name="password" required>
-            </div>
-            <div class="form-group">
-                <label>Type DELETE to confirm</label>
-                <input type="text" name="confirm_text" required>
-            </div>
-            <button type="submit" class="btn btn-danger">Delete Account</button>
-        </form>
-    </section>
+    </div>
 </div>
 {% endblock %}
