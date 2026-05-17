@@ -882,14 +882,23 @@ def build_totp_qr_data_uri(user, secret):
         return None
     try:
         import qrcode
+        from qrcode.image.svg import SvgPathImage
     except ImportError:
         return None
 
-    image = qrcode.make(totp_setup_uri(user, secret))
+    qr = qrcode.QRCode(
+        version=None,
+        error_correction=qrcode.constants.ERROR_CORRECT_M,
+        box_size=10,
+        border=4
+    )
+    qr.add_data(totp_setup_uri(user, secret))
+    qr.make(fit=True)
+    image = qr.make_image(image_factory=SvgPathImage)
     buffer = BytesIO()
-    image.save(buffer, format='PNG')
+    image.save(buffer)
     encoded_qr = base64.b64encode(buffer.getvalue()).decode('ascii')
-    return f"data:image/png;base64,{encoded_qr}"
+    return f"data:image/svg+xml;base64,{encoded_qr}"
 
 def get_user_by_username(username):
     for uid, user in users.items():
@@ -1594,11 +1603,11 @@ def settings():
 
     setup_uri = totp_setup_uri(current_user, pending_secret) if pending_secret else None
     active_tab = request.args.get('tab', 'security')
-    if active_tab not in {'security', 'privacy', 'data'}:
+    if active_tab not in {'security', 'privacy', 'data', 'theme', 'account'}:
         active_tab = 'security'
 
     def render_settings(active='security', **context):
-        selected_tab = active if active in {'security', 'privacy', 'data'} else 'security'
+        selected_tab = active if active in {'security', 'privacy', 'data', 'theme', 'account'} else 'security'
         selected_secret = context.pop('pending_secret', pending_secret)
         selected_setup_uri = context.pop('setup_uri', setup_uri)
         return render_template(
@@ -1724,15 +1733,24 @@ def two_factor_qr():
     if not pending_secret:
         abort(404)
     try:
-        import qrcode 
+        import qrcode
+        from qrcode.image.svg import SvgPathImage
     except ImportError:
         abort(503)
 
-    image = qrcode.make(totp_setup_uri(current_user, pending_secret))
+    qr = qrcode.QRCode(
+        version=None,
+        error_correction=qrcode.constants.ERROR_CORRECT_M,
+        box_size=10,
+        border=4
+    )
+    qr.add_data(totp_setup_uri(current_user, pending_secret))
+    qr.make(fit=True)
+    image = qr.make_image(image_factory=SvgPathImage)
     buffer = BytesIO()
-    image.save(buffer, format='PNG')
+    image.save(buffer)
     buffer.seek(0)
-    response = send_file(buffer, mimetype='image/png', max_age=0)
+    response = send_file(buffer, mimetype='image/svg+xml', max_age=0)
     response.headers['Cache-Control'] = 'no-store'
     return response
 

@@ -19,16 +19,24 @@
     <div class="settings-layout">
         <aside class="settings-tabs" aria-label="Settings sections">
             <a class="settings-tab {% if active_tab == 'security' %}active{% endif %}" href="{{ url_for('settings', tab='security') }}">
-                <span>Security</span>
-                <small>Two-step auth</small>
+                <span>Two-step auth</span>
+                <small>QR and codes</small>
             </a>
             <a class="settings-tab {% if active_tab == 'privacy' %}active{% endif %}" href="{{ url_for('settings', tab='privacy') }}">
                 <span>Privacy</span>
                 <small>Notice and rights</small>
             </a>
+            <a class="settings-tab {% if active_tab == 'theme' %}active{% endif %}" href="{{ url_for('settings', tab='theme') }}">
+                <span>Theme</span>
+                <small>{{ 'Light' if session.get('theme', 'dark') == 'light' else 'Dark' }} mode</small>
+            </a>
             <a class="settings-tab {% if active_tab == 'data' %}active{% endif %}" href="{{ url_for('settings', tab='data') }}">
                 <span>Your data</span>
                 <small>Export or delete</small>
+            </a>
+            <a class="settings-tab {% if active_tab == 'account' %}active{% endif %}" href="{{ url_for('settings', tab='account') }}">
+                <span>Account</span>
+                <small>Logout</small>
             </a>
         </aside>
 
@@ -64,7 +72,7 @@
                                 {% if qr_data_uri %}
                                     <img src="{{ qr_data_uri }}" alt="Two-step authentication QR code">
                                 {% else %}
-                                    <p class="qr-fallback">QR code generation is unavailable. Use the setup key below.</p>
+                                    <p class="qr-fallback">QR code generation is unavailable. Restart the app after installing requirements, or use the setup key.</p>
                                 {% endif %}
                             </div>
                             <div class="setup-code-stack">
@@ -122,7 +130,7 @@
                     </section>
                 </div>
             </section>
-            {% else %}
+            {% elif active_tab == 'data' %}
             <section class="settings-panel">
                 <div class="settings-panel-header">
                     <div>
@@ -153,6 +161,32 @@
                         <input type="text" name="confirm_text" required>
                     </div>
                     <button type="submit" class="btn btn-danger">Delete Account</button>
+                </form>
+            </section>
+            {% elif active_tab == 'theme' %}
+            <section class="settings-panel">
+                <div class="settings-panel-header">
+                    <div>
+                        <h2>Theme</h2>
+                        <p>Current theme: <strong>{{ 'Light' if session.get('theme', 'dark') == 'light' else 'Dark' }}</strong></p>
+                    </div>
+                </div>
+                <form action="{{ url_for('toggle_theme') }}" method="POST" class="settings-form">
+                    <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+                    <button type="submit" class="btn btn-secondary">Switch Theme</button>
+                </form>
+            </section>
+            {% else %}
+            <section class="settings-panel">
+                <div class="settings-panel-header">
+                    <div>
+                        <h2>Account</h2>
+                        <p>Signed in as <strong>@{{ current_user.username }}</strong>.</p>
+                    </div>
+                </div>
+                <form action="{{ url_for('logout') }}" method="POST" class="settings-form">
+                    <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+                    <button type="submit" class="btn btn-secondary">Logout</button>
                 </form>
             </section>
             {% endif %}
