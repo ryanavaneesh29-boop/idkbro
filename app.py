@@ -759,6 +759,7 @@ def normalize_user_record(uid, user):
     user.setdefault('blocked', [])
     user.setdefault('is_private', False)
     user.setdefault('pinned_tweet', None)
+    user['profile_picture'] = normalize_media(user.get('profile_picture'))
     user.setdefault('reset_token', None)
     user.setdefault('reset_token_expires_at', None)
     user.setdefault('is_admin', False)
@@ -1040,6 +1041,41 @@ def save_uploaded_media(file_storage):
         'url': media_url(unique_name)
     }, None
 
+def save_uploaded_profile_picture(file_storage):
+    if not file_storage or not file_storage.filename:
+        return None, 'Please choose an image to upload'
+
+    media_type = allowed_media_extension(file_storage.filename)
+    if media_type != 'image':
+        return None, 'Profile pictures must be PNG, JPG, JPEG, GIF, or WEBP images'
+    extension = file_storage.filename.rsplit('.', 1)[1].lower()
+
+    if file_storage.mimetype not in {'image/png', 'image/jpeg', 'image/gif', 'image/webp'}:
+        return None, 'That image type is not supported'
+
+    header = file_storage.stream.read(32)
+    file_storage.stream.seek(0)
+    if not media_signature_matches('image', extension, header):
+        return None, 'The uploaded file does not look like a valid image'
+    if not image_upload_is_parseable(file_storage):
+        return None, 'The uploaded image could not be processed safely'
+
+    filename = secure_filename(file_storage.filename)
+    if not filename:
+        return None, 'That filename is not supported'
+    unique_name = f"profile_{uuid.uuid4().hex}_{filename}"
+    destination = UPLOAD_DIR / unique_name
+    save_image_without_metadata(file_storage, destination, extension)
+    try:
+        os.chmod(destination, 0o600)
+    except OSError:
+        pass
+    return {
+        'type': 'image',
+        'filename': unique_name,
+        'url': media_url(unique_name)
+    }, None
+
 def build_tweet_view(tweet, viewer_id):
     tweet_user = users.get(tweet['user_id'], {})
     return {
@@ -1084,6 +1120,16 @@ def tweet_for_media(filename):
         media = normalize_media(tweet.get('media'))
         if media and media.get('filename') == safe_name:
             return tweet
+    return None
+
+def user_for_profile_picture(filename):
+    if not is_safe_media_filename(filename):
+        return None
+    safe_name = filename
+    for user in users.values():
+        profile_picture = normalize_media(user.get('profile_picture'))
+        if profile_picture and profile_picture.get('filename') == safe_name:
+            return user
     return None
 
 def build_message_view(message, current_user_id):
@@ -1165,6 +1211,12 @@ def delete_account_data(user_id):
     current_user = users.get(user_id)
     if not current_user:
         return
+
+    profile_picture = normalize_media(current_user.get('profile_picture'))
+    if profile_picture:
+        picture_path = UPLOAD_DIR / secure_filename(profile_picture.get('filename', ''))
+        if picture_path.exists():
+            picture_path.unlink()
 
     for tweet_id in [
         tid for tid, tweet in list(tweets.items())
@@ -1268,12 +1320,14 @@ def build_conversation_summaries(current_user_id):
             'bio': other_user.get('bio', ''),
             'last_message': '',
             'last_message_at': '',
+            'last_message_from_current_user': False,
             'unread_count': 0
         })
 
         if not summary['last_message_at'] or message['created_at'] > summary['last_message_at']:
             summary['last_message'] = message.get('content', '')
             summary['last_message_at'] = message['created_at']
+            summary['last_message_from_current_user'] = message['sender_id'] == current_user_id
 
         if message['receiver_id'] == current_user_id and not message.get('read', False):
             summary['unread_count'] += 1
@@ -1390,7 +1444,14 @@ def media_file(filename):
     if not media_path.exists():
         abort(404)
     owning_tweet = tweet_for_media(safe_name)
-    if not owning_tweet or not can_view_tweet(owning_tweet, session.get('user_id')):
+    owning_user = user_for_profile_picture(safe_name)
+    if owning_tweet:
+        can_view_media = can_view_tweet(owning_tweet, session.get('user_id'))
+    elif owning_user:
+        can_view_media = can_view_user_content(owning_user, session.get('user_id'))
+    else:
+        can_view_media = False
+    if not can_view_media:
         abort(404)
     response = send_from_directory(UPLOAD_DIR, safe_name, conditional=True)
     response.headers['X-Content-Type-Options'] = 'nosniff'
@@ -2059,6 +2120,29 @@ def block_user(username):
         target_user.get('followers', []).remove(session['user_id'])
     save_data(users, tweets, notifications, messages)
     return redirect(url_for('profile', username=username))
+
+@app.route('/profile/photo', methods=['POST'])
+@login_required
+def update_profile_photo():
+    current_user = users.get(session['user_id'])
+    if not current_user:
+        session.clear()
+        return redirect(url_for('login'))
+
+    profile_picture, media_error = save_uploaded_profile_picture(request.files.get('profile_picture'))
+    if media_error:
+        flash(media_error)
+        return redirect(url_for('profile', username=current_user['username']))
+
+    old_picture = normalize_media(current_user.get('profile_picture'))
+    if old_picture:
+        old_path = UPLOAD_DIR / secure_filename(old_picture.get('filename', ''))
+        if old_path.exists():
+            old_path.unlink()
+
+    current_user['profile_picture'] = profile_picture
+    save_data(users, tweets, notifications, messages)
+    return redirect(url_for('profile', username=current_user['username']))
 
 @app.route('/user/<username>')
 def profile(username):

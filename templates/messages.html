@@ -5,6 +5,7 @@
     <aside class="inbox-panel">
         <div class="messages-header">
             <h1>Messages</h1>
+            <p>Tap a conversation to open the chat.</p>
         </div>
         <div class="conversation-list">
             {% for conversation in conversations %}
@@ -18,7 +19,9 @@
                     <span class="message-time">{{ conversation.last_message_at[:16] }}</span>
                     {% endif %}
                 </div>
-                <p class="conversation-preview">{{ conversation.last_message or 'No messages yet' }}</p>
+                <p class="conversation-preview">
+                    {% if conversation.last_message_from_current_user %}<span>You: </span>{% endif %}{{ conversation.last_message or 'No messages yet' }}
+                </p>
                 {% if conversation.unread_count %}
                 <span class="unread-pill">{{ conversation.unread_count }} new</span>
                 {% endif %}

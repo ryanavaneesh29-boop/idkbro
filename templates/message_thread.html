@@ -3,10 +3,11 @@
 {% block title %}Messages with {{ target_user.display_name }}{% endblock %}
 
 {% block content %}
-<div class="messages-shell">
+<div class="messages-shell has-thread">
     <aside class="inbox-panel">
         <div class="messages-header">
             <h1>Messages</h1>
+            <p>Recent chats</p>
         </div>
         <div class="conversation-list">
             {% for conversation in conversations %}
@@ -20,7 +21,9 @@
                     <span class="message-time">{{ conversation.last_message_at[:16] }}</span>
                     {% endif %}
                 </div>
-                <p class="conversation-preview">{{ conversation.last_message or 'No messages yet' }}</p>
+                <p class="conversation-preview">
+                    {% if conversation.last_message_from_current_user %}<span>You: </span>{% endif %}{{ conversation.last_message or 'No messages yet' }}
+                </p>
                 {% if conversation.unread_count and conversation.username != target_user.username %}
                 <span class="unread-pill">{{ conversation.unread_count }} new</span>
                 {% endif %}
@@ -31,6 +34,7 @@
 
     <section class="thread-panel">
         <div class="thread-header">
+            <a href="{{ url_for('messages_page') }}" class="thread-back">Messages</a>
             <div>
                 <h2>{{ target_user.display_name }}</h2>
                 <p class="username">@{{ target_user.username }}</p>

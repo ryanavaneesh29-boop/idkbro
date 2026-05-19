@@ -5,9 +5,40 @@
 {% block content %}
 <div class="profile-container">
     <div class="profile-header">
-        <h2>{{ user.display_name }}</h2>
-        <p class="username">@{{ user.username }}</p>
-        <p class="bio">{{ user.bio or 'No bio yet' }}</p>
+        <div class="profile-identity">
+            <div class="profile-avatar">
+                {% if user.profile_picture %}
+                    <img src="{{ user.profile_picture.url }}" alt="{{ user.display_name }} profile picture">
+                {% else %}
+                    <span>{{ user.display_name[:1]|upper }}</span>
+                {% endif %}
+            </div>
+            <div>
+                <h2>{{ user.display_name }}</h2>
+                <p class="username">@{{ user.username }}</p>
+                <p class="bio">{{ user.bio or 'No bio yet' }}</p>
+            </div>
+        </div>
+
+        {% with messages = get_flashed_messages() %}
+            {% if messages %}
+                {% for message in messages %}
+                <div class="error">{{ message }}</div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        {% if current_user and user.id == current_user.id %}
+        <form action="{{ url_for('update_profile_photo') }}" method="POST" enctype="multipart/form-data" class="profile-photo-form">
+            <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+            <label class="btn btn-secondary">
+                Choose Photo
+                <input type="file" name="profile_picture" accept="image/png,image/jpeg,image/gif,image/webp" required>
+            </label>
+            <button type="submit" class="btn btn-primary">Upload Photo</button>
+        </form>
+        {% endif %}
+
         <div class="stats">
             <a href="{{ url_for('following_list', username=user.username) }}" class="stat-link"><strong>{{ user.following|length }}</strong> Following</a>
             <a href="{{ url_for('followers_list', username=user.username) }}" class="stat-link"><strong>{{ user.followers|length }}</strong> Followers</a>
