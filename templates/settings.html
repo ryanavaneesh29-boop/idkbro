@@ -18,6 +18,14 @@
 
     <div class="settings-layout">
         <aside class="settings-tabs" aria-label="Settings sections">
+            <a class="settings-tab {% if active_tab == 'profile' %}active{% endif %}" href="{{ url_for('settings', tab='profile') }}">
+                <span>Profile</span>
+                <small>Name, bio, photo</small>
+            </a>
+            <a class="settings-tab {% if active_tab == 'account' %}active{% endif %}" href="{{ url_for('settings', tab='account') }}">
+                <span>Account</span>
+                <small>Email, password, privacy</small>
+            </a>
             <a class="settings-tab {% if active_tab == 'security' %}active{% endif %}" href="{{ url_for('settings', tab='security') }}">
                 <span>Two-step auth</span>
                 <small>QR and codes</small>
@@ -34,14 +42,83 @@
                 <span>Your data</span>
                 <small>Export or delete</small>
             </a>
-            <a class="settings-tab {% if active_tab == 'account' %}active{% endif %}" href="{{ url_for('settings', tab='account') }}">
-                <span>Account</span>
-                <small>Logout</small>
-            </a>
         </aside>
 
         <div class="settings-content">
-            {% if active_tab == 'security' %}
+            {% if active_tab == 'profile' %}
+            <section class="settings-panel">
+                <div class="settings-panel-header">
+                    <div>
+                        <h2>Edit profile</h2>
+                        <p>Update how your profile appears to others.</p>
+                    </div>
+                </div>
+                <form method="POST" class="settings-form">
+                    <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+                    <input type="hidden" name="action" value="update_profile">
+                    <div class="form-group">
+                        <label>Username</label>
+                        <input type="text" name="username" value="{{ current_user.username }}" minlength="3" maxlength="30" pattern="[A-Za-z0-9_]+" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Display name</label>
+                        <input type="text" name="display_name" value="{{ current_user.display_name }}" maxlength="60" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Bio</label>
+                        <textarea name="bio" rows="3" maxlength="160">{{ current_user.bio }}</textarea>
+                    </div>
+                    <button type="submit" class="btn btn-primary">Save Profile</button>
+                </form>
+                <form action="{{ url_for('update_profile_photo') }}" method="POST" enctype="multipart/form-data" class="settings-form profile-photo-form">
+                    <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+                    <input type="hidden" name="next" value="settings">
+                    <label class="btn btn-secondary">
+                        Choose Photo
+                        <input type="file" name="profile_picture" accept="image/png,image/jpeg,image/gif,image/webp" required>
+                    </label>
+                    <button type="submit" class="btn btn-primary">Upload Photo</button>
+                </form>
+            </section>
+            {% elif active_tab == 'account' %}
+            <section class="settings-panel">
+                <div class="settings-panel-header">
+                    <div>
+                        <h2>Account</h2>
+                        <p>Manage login details and account privacy.</p>
+                    </div>
+                </div>
+                <form method="POST" class="settings-form">
+                    <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+                    <input type="hidden" name="action" value="update_account">
+                    <div class="form-group">
+                        <label>Email</label>
+                        <input type="email" name="email" value="{{ current_user.email }}" required>
+                    </div>
+                    <label class="checkbox-row">
+                        <input type="checkbox" name="is_private" {% if current_user.is_private %}checked{% endif %}>
+                        <span>Make my account private</span>
+                    </label>
+                    <div class="form-group">
+                        <label>Current password</label>
+                        <input type="password" name="current_password" autocomplete="current-password">
+                    </div>
+                    <div class="form-group">
+                        <label>New password</label>
+                        <input type="password" name="new_password" minlength="8" autocomplete="new-password">
+                    </div>
+                    <div class="form-group">
+                        <label>Confirm new password</label>
+                        <input type="password" name="confirm_password" minlength="8" autocomplete="new-password">
+                    </div>
+                    <button type="submit" class="btn btn-primary">Save Account</button>
+                </form>
+                <form action="{{ url_for('logout') }}" method="POST" class="settings-form danger-zone">
+                    <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+                    <button type="submit" class="btn btn-secondary">Logout</button>
+                </form>
+            </section>
+            {% elif active_tab == 'security' %}
             <section class="settings-panel">
                 <div class="settings-panel-header">
                     <div>
@@ -174,19 +251,6 @@
                 <form action="{{ url_for('toggle_theme') }}" method="POST" class="settings-form">
                     <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
                     <button type="submit" class="btn btn-secondary">Switch Theme</button>
-                </form>
-            </section>
-            {% else %}
-            <section class="settings-panel">
-                <div class="settings-panel-header">
-                    <div>
-                        <h2>Account</h2>
-                        <p>Signed in as <strong>@{{ current_user.username }}</strong>.</p>
-                    </div>
-                </div>
-                <form action="{{ url_for('logout') }}" method="POST" class="settings-form">
-                    <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
-                    <button type="submit" class="btn btn-secondary">Logout</button>
                 </form>
             </section>
             {% endif %}

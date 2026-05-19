@@ -20,6 +20,13 @@
             <h3>Users</h3>
             {% for user in results.users %}
             <div class="user-result">
+                <span class="avatar avatar-sm">
+                    {% if user.profile_picture %}
+                        <img src="{{ user.profile_picture.url }}" alt="">
+                    {% else %}
+                        <span>{{ user.display_name[:1]|upper }}</span>
+                    {% endif %}
+                </span>
                 <div class="user-info">
                     <a href="{{ url_for('profile', username=user.username) }}" class="user-link">
                         <strong>{{ user.display_name }}</strong>
@@ -48,8 +55,15 @@
             <h3>Tweets</h3>
             {% for tweet in results.tweets %}
             <div class="tweet" data-tweet-url="{{ url_for('tweet_detail', tweet_id=tweet.id) }}">
-                <div class="tweet-header">
-                    <a href="{{ url_for('profile', username=tweet.username) }}" class="user-link">
+            <div class="tweet-header">
+                <span class="avatar avatar-sm">
+                    {% if tweet.profile_picture %}
+                        <img src="{{ tweet.profile_picture.url }}" alt="">
+                    {% else %}
+                        <span>{{ tweet.display_name[:1]|upper }}</span>
+                    {% endif %}
+                </span>
+                <a href="{{ url_for('profile', username=tweet.username) }}" class="user-link">
                         <strong>{{ tweet.display_name }}</strong>
                         <span class="username">@{{ tweet.username }}</span>
                     </a>

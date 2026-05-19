@@ -6,6 +6,13 @@
     <div class="who-list">
         {% for user in suggestions %}
         <div class="who-card">
+            <span class="avatar avatar-sm">
+                {% if user.profile_picture %}
+                    <img src="{{ user.profile_picture.url }}" alt="">
+                {% else %}
+                    <span>{{ user.display_name[:1]|upper }}</span>
+                {% endif %}
+            </span>
             <div>
                 <a href="{{ url_for('profile', username=user.username) }}" class="user-link">
                     <strong>{{ user.display_name }}</strong>

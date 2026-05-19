@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+
+{% block title %}Reports - idkbro{% endblock %}
+
+{% block content %}
+<div class="admin-logs">
+    <div class="admin-header">
+        <div>
+            <h1>Reports</h1>
+            <p>Review posts and users reported by the community.</p>
+        </div>
+        <a href="{{ url_for('admin_logs') }}" class="btn btn-secondary">Admin Logs</a>
+    </div>
+
+    <form method="GET" class="admin-filters">
+        <div class="admin-filter-field">
+            <label>Status</label>
+            <select name="status">
+                <option value="open" {% if selected_status == 'open' %}selected{% endif %}>Open</option>
+                <option value="closed" {% if selected_status == 'closed' %}selected{% endif %}>Closed</option>
+                <option value="all" {% if selected_status == 'all' %}selected{% endif %}>All</option>
+            </select>
+        </div>
+        <div class="admin-filter-actions">
+            <button type="submit" class="btn btn-primary">Filter</button>
+        </div>
+    </form>
+
+    <div class="admin-log-table-wrap">
+        <table class="admin-log-table">
+            <thead>
+                <tr>
+                    <th>Time</th>
+                    <th>Reporter</th>
+                    <th>Target</th>
+                    <th>Reason</th>
+                    <th>Status</th>
+                    <th>Action</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for report in reports %}
+                <tr>
+                    <td class="admin-log-time">{{ report.created_at }}</td>
+                    <td>@{{ report.reporter }}</td>
+                    <td>
+                        {% if report.target_url %}
+                            <a href="{{ report.target_url }}">{{ report.target_label }}</a>
+                        {% else %}
+                            {{ report.target_label }}
+                        {% endif %}
+                        <div class="muted">{{ report.target_type }}</div>
+                    </td>
+                    <td class="admin-log-message">{{ report.reason }}</td>
+                    <td>{{ report.status }}</td>
+                    <td>
+                        {% if report.status == 'open' %}
+                        <form method="POST" action="{{ url_for('close_admin_report', report_id=report.id) }}">
+                            <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+                            <button type="submit" class="btn btn-secondary">Close</button>
+                        </form>
+                        {% else %}
+                        <span class="muted">Closed{% if report.resolver %} by @{{ report.resolver }}{% endif %}</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="6" class="empty-state">No reports found.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

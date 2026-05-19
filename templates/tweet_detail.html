@@ -10,6 +10,13 @@
 
     <article class="tweet tweet-detail">
         <div class="tweet-header">
+            <span class="avatar avatar-sm">
+                {% if tweet.profile_picture %}
+                    <img src="{{ tweet.profile_picture.url }}" alt="">
+                {% else %}
+                    <span>{{ tweet.display_name[:1]|upper }}</span>
+                {% endif %}
+            </span>
             <a href="{{ url_for('profile', username=tweet.username) }}" class="user-link">
                 <strong>{{ tweet.display_name }}</strong>
                 <span class="username">@{{ tweet.username }}</span>
@@ -55,6 +62,13 @@
             </form>
             <button class="reply-btn" onclick="toggleReplyForm('{{ tweet.id }}')">💬</button>
             <a href="{{ url_for('quote_tweet', tweet_id=tweet.id) }}" class="quote-btn">📝</a>
+            {% if tweet.user_id != current_user.id %}
+            <form action="{{ url_for('report_tweet', tweet_id=tweet.id) }}" method="POST" class="inline-form">
+                <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="reason" value="Reported from post detail">
+                <button type="submit" class="quote-btn">Report</button>
+            </form>
+            {% endif %}
             {% if can_delete_tweet_id(tweet.id, current_user.id) %}
             <form action="{{ url_for('delete_tweet', tweet_id=tweet.id) }}" method="POST" class="delete-form">
                 <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
@@ -90,6 +104,13 @@
         {% for reply in replies %}
         <article class="reply">
             <div class="reply-header">
+                <span class="avatar avatar-xs">
+                    {% if reply.profile_picture %}
+                        <img src="{{ reply.profile_picture.url }}" alt="">
+                    {% else %}
+                        <span>{{ reply.display_name[:1]|upper }}</span>
+                    {% endif %}
+                </span>
                 <a href="{{ url_for('profile', username=reply.username) }}" class="user-link">
                     <strong>{{ reply.display_name }}</strong>
                     <span class="username">@{{ reply.username }}</span>
