@@ -235,6 +235,22 @@ def init_app_db():
         conn.execute('CREATE INDEX IF NOT EXISTS idx_logs_timestamp ON logs (timestamp)')
         conn.execute('CREATE INDEX IF NOT EXISTS idx_logs_user ON logs (user_id)')
 
+        conn.execute('''
+            CREATE TABLE IF NOT EXISTS reports (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                created_at REAL NOT NULL,
+                reporter_id TEXT NOT NULL,
+                target_type TEXT NOT NULL,
+                target_id TEXT NOT NULL,
+                reason TEXT NOT NULL,
+                status TEXT NOT NULL DEFAULT 'open',
+                resolved_at REAL,
+                resolved_by TEXT
+            )
+        ''')
+        conn.execute('CREATE INDEX IF NOT EXISTS idx_reports_status ON reports (status)')
+        conn.execute('CREATE INDEX IF NOT EXISTS idx_reports_target ON reports (target_type, target_id)')
+
         # Config table for configuration and settings
         conn.execute('''
             CREATE TABLE IF NOT EXISTS config (
@@ -464,6 +480,36 @@ def get_logs(limit=100, user_id=None, level=None):
         query += ' ORDER BY timestamp DESC LIMIT ?'
         params.append(limit)
         return conn.execute(query, params).fetchall()
+
+def create_report(reporter_id, target_type, target_id, reason):
+    clean_reason = reason.strip()[:500] or 'No reason provided'
+    with sqlite3.connect(APP_DB) as conn:
+        conn.execute(
+            'INSERT INTO reports (created_at, reporter_id, target_type, target_id, reason) VALUES (?, ?, ?, ?, ?)',
+            (time.time(), reporter_id, target_type, target_id, clean_reason)
+        )
+
+def get_reports(status='open', limit=100):
+    with sqlite3.connect(APP_DB) as conn:
+        query = '''
+            SELECT id, created_at, reporter_id, target_type, target_id, reason, status, resolved_at, resolved_by
+            FROM reports
+            WHERE 1=1
+        '''
+        params = []
+        if status in {'open', 'closed'}:
+            query += ' AND status = ?'
+            params.append(status)
+        query += ' ORDER BY created_at DESC LIMIT ?'
+        params.append(limit)
+        return conn.execute(query, params).fetchall()
+
+def close_report(report_id, resolver_id):
+    with sqlite3.connect(APP_DB) as conn:
+        conn.execute(
+            'UPDATE reports SET status = ?, resolved_at = ?, resolved_by = ? WHERE id = ?',
+            ('closed', time.time(), resolver_id, report_id)
+        )
 
 # Configuration and Settings
 def set_config(key, value):
@@ -766,6 +812,21 @@ def normalize_user_record(uid, user):
     user.setdefault('two_factor_enabled', False)
     user.setdefault('two_factor_secret', None)
     return user
+
+def user_avatar_url(user):
+    profile_picture = normalize_media((user or {}).get('profile_picture'))
+    return profile_picture.get('url') if profile_picture else None
+
+def user_initial(user):
+    name = (user or {}).get('display_name') or (user or {}).get('username') or '?'
+    return name[:1].upper()
+
+@app.context_processor
+def inject_avatar_helpers():
+    return {
+        'user_avatar_url': user_avatar_url,
+        'user_initial': user_initial
+    }
 
 def normalize_tweet_record(tid, tweet):
     tweet.setdefault('id', tid)
@@ -1082,6 +1143,7 @@ def build_tweet_view(tweet, viewer_id):
         **tweet,
         'username': tweet_user.get('username', 'unknown'),
         'display_name': tweet_user.get('display_name', 'Unknown'),
+        'profile_picture': normalize_media(tweet_user.get('profile_picture')),
         'is_liked': viewer_id in tweet.get('likes', []),
         'like_count': len(tweet.get('likes', [])),
         'retweet_count': len(tweet.get('retweets', [])),
@@ -1290,6 +1352,7 @@ def build_user_list_entry(user_id, viewer_id):
         'username': user.get('username', 'unknown'),
         'display_name': user.get('display_name', 'Unknown'),
         'bio': user.get('bio', ''),
+        'profile_picture': normalize_media(user.get('profile_picture')),
         'is_following': viewer_id in user.get('followers', [])
     }
 
@@ -1318,6 +1381,7 @@ def build_conversation_summaries(current_user_id):
             'username': other_user.get('username', 'unknown'),
             'display_name': other_user.get('display_name', 'Unknown'),
             'bio': other_user.get('bio', ''),
+            'profile_picture': normalize_media(other_user.get('profile_picture')),
             'last_message': '',
             'last_message_at': '',
             'last_message_from_current_user': False,
@@ -1664,11 +1728,11 @@ def settings():
 
     setup_uri = totp_setup_uri(current_user, pending_secret) if pending_secret else None
     active_tab = request.args.get('tab', 'security')
-    if active_tab not in {'security', 'privacy', 'data', 'theme', 'account'}:
+    if active_tab not in {'profile', 'account', 'security', 'privacy', 'data', 'theme'}:
         active_tab = 'security'
 
     def render_settings(active='security', **context):
-        selected_tab = active if active in {'security', 'privacy', 'data', 'theme', 'account'} else 'security'
+        selected_tab = active if active in {'profile', 'account', 'security', 'privacy', 'data', 'theme'} else 'security'
         selected_secret = context.pop('pending_secret', pending_secret)
         selected_setup_uri = context.pop('setup_uri', setup_uri)
         return render_template(
@@ -1683,6 +1747,47 @@ def settings():
 
     if request.method == 'POST':
         action = request.form.get('action')
+        if action == 'update_profile':
+            username = request.form.get('username', '').lower().strip()
+            display_name = request.form.get('display_name', '').strip()
+            bio = request.form.get('bio', '').strip()
+            if not is_valid_username(username):
+                return render_settings(active='profile', error='Username must be 3-30 characters and use only letters, numbers, and underscores.')
+            if len(display_name) < 1 or len(display_name) > 60 or len(bio) > 160:
+                return render_settings(active='profile', error='Display name or bio is too long.')
+            for uid, user in users.items():
+                if uid != session['user_id'] and user.get('username') == username:
+                    return render_settings(active='profile', error='That username is already taken.')
+            current_user['username'] = username
+            current_user['display_name'] = display_name
+            current_user['bio'] = bio
+            save_data(users, tweets, notifications, messages)
+            return render_settings(active='profile', success='Profile updated.')
+
+        if action == 'update_account':
+            email = request.form.get('email', '').lower().strip()
+            is_private = request.form.get('is_private') == 'on'
+            current_password = request.form.get('current_password', '')
+            new_password = request.form.get('new_password', '')
+            confirm_password = request.form.get('confirm_password', '')
+            if not is_valid_email(email):
+                return render_settings(active='account', error='Please enter a valid email address.')
+            existing_email_id, _ = get_user_by_email(email)
+            if existing_email_id and existing_email_id != session['user_id']:
+                return render_settings(active='account', error='That email is already in use.')
+            if new_password or confirm_password:
+                if not verify_password(current_user.get('password_hash'), current_password):
+                    return render_settings(active='account', error='Current password did not match.')
+                if len(new_password) < 8:
+                    return render_settings(active='account', error='New password must be at least 8 characters.')
+                if new_password != confirm_password:
+                    return render_settings(active='account', error='New passwords do not match.')
+                current_user['password_hash'] = hash_password(new_password)
+            current_user['email'] = email
+            current_user['is_private'] = is_private
+            save_data(users, tweets, notifications, messages)
+            return render_settings(active='account', success='Account settings updated.')
+
         if action == 'refresh_2fa':
             session['pending_2fa_secret'] = generate_totp_secret()
             return redirect(url_for('settings', tab='security'))
@@ -2142,7 +2247,31 @@ def update_profile_photo():
 
     current_user['profile_picture'] = profile_picture
     save_data(users, tweets, notifications, messages)
+    if request.form.get('next') == 'settings':
+        return redirect(url_for('settings', tab='profile'))
     return redirect(url_for('profile', username=current_user['username']))
+
+@app.route('/report/tweet/<tweet_id>', methods=['POST'])
+@login_required
+def report_tweet(tweet_id):
+    tweet = tweets.get(tweet_id)
+    if not tweet or not can_view_tweet(tweet, session['user_id']):
+        abort(404)
+    if tweet.get('user_id') == session['user_id']:
+        return redirect(safe_redirect_url())
+    create_report(session['user_id'], 'tweet', tweet_id, request.form.get('reason', ''))
+    flash('Thanks. The report was sent to the admins.')
+    return redirect(safe_redirect_url())
+
+@app.route('/report/user/<username>', methods=['POST'])
+@login_required
+def report_user(username):
+    uid, target_user = get_user_by_username(username)
+    if not target_user or uid == session['user_id']:
+        return redirect(url_for('index'))
+    create_report(session['user_id'], 'user', uid, request.form.get('reason', ''))
+    flash('Thanks. The report was sent to the admins.')
+    return redirect(url_for('profile', username=username))
 
 @app.route('/user/<username>')
 def profile(username):
@@ -2332,6 +2461,7 @@ def notifications_view():
                 **notification,
                 'from_username': from_user.get('username', 'unknown'),
                 'from_display_name': from_user.get('display_name', 'Unknown'),
+                'from_profile_picture': normalize_media(from_user.get('profile_picture')),
                 'tweet_content': tweet.get('content', '')[:50] + '...' if tweet and len(tweet.get('content', '')) > 50 else tweet.get('content', '') if tweet else ''
             })
     
@@ -2523,6 +2653,54 @@ def admin_logs():
         search_query=search_query,
         unique_ips=unique_ips
     )
+
+@app.route('/admin/reports')
+@admin_required
+def admin_reports():
+    selected_status = request.args.get('status', 'open')
+    if selected_status not in {'open', 'closed', 'all'}:
+        selected_status = 'open'
+    report_rows = get_reports(status=selected_status, limit=250)
+    report_items = []
+    for report in report_rows:
+        report_id, created_at, reporter_id, target_type, target_id, reason, status, resolved_at, resolved_by = report
+        target_label = target_id
+        target_url = None
+        if target_type == 'tweet':
+            target_tweet = tweets.get(target_id)
+            if target_tweet:
+                target_user = users.get(target_tweet.get('user_id'), {})
+                target_label = f"Post by @{target_user.get('username', 'unknown')}: {target_tweet.get('content', '')[:80]}"
+                target_url = url_for('tweet_detail', tweet_id=target_id)
+        elif target_type == 'user':
+            target_user = users.get(target_id)
+            if target_user:
+                target_label = f"@{target_user.get('username', 'unknown')} ({target_user.get('display_name', 'Unknown')})"
+                target_url = url_for('profile', username=target_user.get('username'))
+        report_items.append({
+            'id': report_id,
+            'created_at': datetime.fromtimestamp(created_at).strftime('%Y-%m-%d %H:%M:%S'),
+            'reporter': users.get(reporter_id, {}).get('username', 'unknown'),
+            'target_type': target_type,
+            'target_label': target_label,
+            'target_url': target_url,
+            'reason': reason,
+            'status': status,
+            'resolved_at': datetime.fromtimestamp(resolved_at).strftime('%Y-%m-%d %H:%M:%S') if resolved_at else None,
+            'resolver': users.get(resolved_by, {}).get('username') if resolved_by else None
+        })
+    return render_template(
+        'admin_reports.html',
+        reports=report_items,
+        current_user=users.get(session['user_id']),
+        selected_status=selected_status
+    )
+
+@app.route('/admin/reports/<int:report_id>/close', methods=['POST'])
+@admin_required
+def close_admin_report(report_id):
+    close_report(report_id, session['user_id'])
+    return redirect(safe_redirect_url('admin_reports'))
 
 if __name__ == '__main__':
     port = int(os.getenv("PORT", 5000))

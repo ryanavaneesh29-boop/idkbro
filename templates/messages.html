@@ -11,6 +11,13 @@
             {% for conversation in conversations %}
             <a href="{{ url_for('message_thread', username=conversation.username) }}" class="conversation-card {% if conversation.unread_count %}unread{% endif %}">
                 <div class="conversation-top">
+                    <span class="avatar avatar-sm">
+                        {% if conversation.profile_picture %}
+                            <img src="{{ conversation.profile_picture.url }}" alt="">
+                        {% else %}
+                            <span>{{ conversation.display_name[:1]|upper }}</span>
+                        {% endif %}
+                    </span>
                     <div>
                         <strong>{{ conversation.display_name }}</strong>
                         <span class="username">@{{ conversation.username }}</span>
